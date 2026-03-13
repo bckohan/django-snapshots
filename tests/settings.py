@@ -80,6 +80,8 @@ elif rdbms == "oracle":  # pragma: no cover
 
 
 INSTALLED_APPS = [
+    "django_snapshots.import",
+    "django_snapshots.export",
     "django_snapshots",
     "django.contrib.auth",
     "django.contrib.contenttypes",

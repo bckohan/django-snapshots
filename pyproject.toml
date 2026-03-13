@@ -15,6 +15,7 @@ homepage = "https://django-snapshots.readthedocs.io"
 keywords = ["django"]
 dependencies = [
     "django>=4.2,<6.1",
+    "django-typer>=3.6.4",
 ]
 classifiers = [
     "Environment :: Web Environment",

@@ -43,6 +43,15 @@ wheels = [
 ]
 
 [[package]]
+name = "annotated-doc"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz", hash = "sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4", size = 7288, upload-time = "2025-11-10T22:07:42.062Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl", hash = "sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320", size = 5303, upload-time = "2025-11-10T22:07:40.673Z" },
+]
+
+[[package]]
 name = "anyio"
 version = "4.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -626,9 +635,9 @@ name = "django"
 version = "5.2.12"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
+    "python_full_version >= '3.12'",
     "python_full_version == '3.11.*'",
     "python_full_version < '3.11'",
-    "python_full_version >= '3.12'",
 ]
 dependencies = [
     { name = "asgiref", marker = "(python_full_version < '3.12' and extra != 'group-16-django-snapshots-dj42') or extra == 'group-16-django-snapshots-dj52' or (extra == 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-oracledb') or (extra == 'group-16-django-snapshots-dj42' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-mysqlclient14' and extra == 'group-16-django-snapshots-mysqlclient2x') or (extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3')" },
@@ -665,6 +674,7 @@ dependencies = [
     { name = "django", version = "4.2.29", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-16-django-snapshots-dj42' or (extra == 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-oracledb') or (extra == 'group-16-django-snapshots-dj52' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-mysqlclient14' and extra == 'group-16-django-snapshots-mysqlclient2x') or (extra != 'group-16-django-snapshots-oracledb' and extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3') or (extra != 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3')" },
     { name = "django", version = "5.2.12", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and extra != 'group-16-django-snapshots-dj42') or extra == 'group-16-django-snapshots-dj52' or (extra == 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-oracledb') or (extra == 'group-16-django-snapshots-dj42' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-mysqlclient14' and extra == 'group-16-django-snapshots-mysqlclient2x') or (extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3')" },
     { name = "django", version = "6.0.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra != 'group-16-django-snapshots-dj42' and extra != 'group-16-django-snapshots-dj52') or (extra == 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-oracledb') or (extra == 'group-16-django-snapshots-dj42' and extra == 'group-16-django-snapshots-dj52') or (extra == 'group-16-django-snapshots-dj42' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-dj52' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-mysqlclient14' and extra == 'group-16-django-snapshots-mysqlclient2x') or (extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3')" },
+    { name = "django-typer" },
 ]
 
 [package.dev-dependencies]
@@ -766,7 +776,10 @@ typing = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "django", specifier = ">=4.2,<6.1" }]
+requires-dist = [
+    { name = "django", specifier = ">=4.2,<6.1" },
+    { name = "django-typer", specifier = ">=3.6.4" },
+]
 
 [package.metadata.requires-dev]
 coverage = [{ name = "coverage", extras = ["toml"], specifier = ">=7.6.1" }]
@@ -873,6 +886,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/55/03/9c2be939490d2282328db4611bc5956899f5ff7eabc3e88bd4b964a87373/django_stubs_ext-5.2.9.tar.gz", hash = "sha256:6db4054d1580657b979b7d391474719f1a978773e66c7070a5e246cd445a25a9", size = 6497, upload-time = "2026-01-20T23:58:59.462Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/f7/0d5f7d7e76fe972d9f560f687fdc0cab4db9e1624fd90728ca29b4ed7a63/django_stubs_ext-5.2.9-py3-none-any.whl", hash = "sha256:230c51575551b0165be40177f0f6805f1e3ebf799b835c85f5d64c371ca6cf71", size = 9974, upload-time = "2026-01-20T23:58:58.438Z" },
+]
+
+[[package]]
+name = "django-typer"
+version = "3.6.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "django", version = "4.2.29", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-16-django-snapshots-dj42' or (extra == 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-oracledb') or (extra == 'group-16-django-snapshots-dj52' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-mysqlclient14' and extra == 'group-16-django-snapshots-mysqlclient2x') or (extra != 'group-16-django-snapshots-oracledb' and extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3') or (extra != 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3')" },
+    { name = "django", version = "5.2.12", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and extra != 'group-16-django-snapshots-dj42') or extra == 'group-16-django-snapshots-dj52' or (extra == 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-oracledb') or (extra == 'group-16-django-snapshots-dj42' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-mysqlclient14' and extra == 'group-16-django-snapshots-mysqlclient2x') or (extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3')" },
+    { name = "django", version = "6.0.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra != 'group-16-django-snapshots-dj42' and extra != 'group-16-django-snapshots-dj52') or (extra == 'group-16-django-snapshots-cx-oracle' and extra == 'group-16-django-snapshots-oracledb') or (extra == 'group-16-django-snapshots-dj42' and extra == 'group-16-django-snapshots-dj52') or (extra == 'group-16-django-snapshots-dj42' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-dj52' and extra == 'group-16-django-snapshots-dj60') or (extra == 'group-16-django-snapshots-mysqlclient14' and extra == 'group-16-django-snapshots-mysqlclient2x') or (extra == 'group-16-django-snapshots-psycopg2' and extra == 'group-16-django-snapshots-psycopg3')" },
+    { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/5d/48e879127fdb45b292e383f9c3ce5c882ab2352274f151ef222f810e97d6/django_typer-3.6.4.tar.gz", hash = "sha256:cfe8c9a830a3bc31f92954c575a05f14743400e1789c88acd7e8fd5824decccc", size = 2973069, upload-time = "2026-03-02T23:39:21.802Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/db/7db7e461d53d1a1222b9585a3728a17bb293a7f893fc29c13cd37d4104bc/django_typer-3.6.4-py3-none-any.whl", hash = "sha256:cc7b9cf2e2dcdfe279ed2d369b8aa33e5fee9c7c366cb8d9ab2968103003f06d", size = 296053, upload-time = "2026-03-02T23:39:20.264Z" },
 ]
 
 [[package]]
@@ -2059,6 +2088,15 @@ wheels = [
 ]
 
 [[package]]
+name = "shellingham"
+version = "1.5.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
+]
+
+[[package]]
 name = "snowballstemmer"
 version = "3.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2437,6 +2475,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/eb/79/72064e6a701c2183016abbbfedaba506d81e30e232a68c9f0d6f6fcd1574/traitlets-5.14.3.tar.gz", hash = "sha256:9ed0579d3502c94b4b3732ac120375cda96f923114522847de4b3bb98b96b6b7", size = 161621, upload-time = "2024-04-19T11:11:49.746Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/00/c0/8f5d070730d7836adc9c9b6408dec68c6ced86b304a9b26a14df072a6e8c/traitlets-5.14.3-py3-none-any.whl", hash = "sha256:b74e89e397b1ed28cc831db7aea759ba6640cb3de13090ca145426688ff1ac4f", size = 85359, upload-time = "2024-04-19T11:11:46.763Z" },
+]
+
+[[package]]
+name = "typer"
+version = "0.24.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "click" },
+    { name = "rich" },
+    { name = "shellingham" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f5/24/cb09efec5cc954f7f9b930bf8279447d24618bb6758d4f6adf2574c41780/typer-0.24.1.tar.gz", hash = "sha256:e39b4732d65fbdcde189ae76cf7cd48aeae72919dea1fdfc16593be016256b45", size = 118613, upload-time = "2026-02-21T16:54:40.609Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/91/48db081e7a63bb37284f9fbcefda7c44c277b18b0e13fbc36ea2335b71e6/typer-0.24.1-py3-none-any.whl", hash = "sha256:112c1f0ce578bfb4cab9ffdabc68f031416ebcc216536611ba21f04e9aa84c9e", size = 56085, upload-time = "2026-02-21T16:54:41.616Z" },
 ]
 
 [[package]]
