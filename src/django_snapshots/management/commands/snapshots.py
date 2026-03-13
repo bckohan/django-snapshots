@@ -9,3 +9,8 @@ class Command(TyperCommand):
     def list(self):
         """List snapshots"""
         pass
+
+    @command()
+    def delete(self):
+        """Delete snapshots"""
+        pass
