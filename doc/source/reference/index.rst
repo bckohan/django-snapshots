@@ -6,12 +6,15 @@
 Reference
 =========
 
-.. automodule:: django_snapshots
-
-|
+Complete API reference for django-snapshots.
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :caption: Reference:
 
+   settings
+   dataclasses
+   storage
+   connectors
+   exceptions
 

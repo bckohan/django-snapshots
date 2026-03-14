@@ -15,9 +15,11 @@ from playwright.sync_api import Page, sync_playwright, expect
 # here passes the HEADLESS env var (set by --headed in conftest.pytest_configure)
 # through to the page fixture, mirroring the class-based approach.
 
+
 @pytest.fixture(scope="session")
 def browser_type_launch_args(browser_type_launch_args: dict) -> dict:
     return {**browser_type_launch_args, "headless": bool(os.environ.get("HEADLESS"))}
+
 
 @pytest.fixture
 def admin_user(db):
@@ -48,6 +50,7 @@ def test_admin_login(logged_in_page: Page, live_server):
 
 
 # ── Non-browser unittest style tests ────────────────────────────────────────
+
 
 @pytest.mark.django_db
 def test_example():

@@ -7,6 +7,7 @@ django-snapshots
 
 
 .. only:: html
+
     .. image:: https://img.shields.io/badge/License-MIT-blue.svg
         :target: https://opensource.org/licenses/MIT
         :alt: MIT License
@@ -62,8 +63,16 @@ django-snapshots
 A generic and pluggable backup and restore management utility for Django.
 
 .. toctree::
+   :maxdepth: 1
+   :caption: Learn:
+
+   tutorials/index
+   how-to/index
+   explanation/index
+
+.. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Reference:
 
    reference/index
    changelog

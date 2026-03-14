@@ -16,6 +16,7 @@ keywords = ["django"]
 dependencies = [
     "django>=4.2,<6.1",
     "django-typer>=3.6.4",
+    "tqdm>=4.0.0",
 ]
 classifiers = [
     "Environment :: Web Environment",
@@ -164,6 +165,8 @@ norecursedirs = "*.egg .eggs dist build docs .tox .git __pycache__"
 
 markers = [
     "ui: mark test as a UI/browser test requiring Playwright",
+    "postgres: mark test as requiring PostgreSQL (set RDBMS=postgres)",
+    "mysql: mark test as requiring MySQL or MariaDB (set RDBMS=mysql or RDBMS=mariadb)",
 ]
 addopts = [
     "--strict-markers",
