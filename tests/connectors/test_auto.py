@@ -52,7 +52,10 @@ def test_get_connector_for_alias_uses_settings_override(settings):
 def test_get_connector_for_alias_auto_detects_from_databases(settings):
     from django.conf import settings as django_settings
 
-    from django_snapshots.connectors.auto import get_connector_class, get_connector_for_alias
+    from django_snapshots.connectors.auto import (
+        get_connector_class,
+        get_connector_for_alias,
+    )
 
     engine = django_settings.DATABASES["default"]["ENGINE"]
     expected_cls = get_connector_class(engine)
