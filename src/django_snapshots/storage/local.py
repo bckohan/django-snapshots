@@ -48,7 +48,7 @@ class LocalFileSystemBackend:
         for dirpath, _, filenames in os.walk(root):
             for filename in filenames:
                 full = Path(dirpath) / filename
-                rel = str(full.relative_to(root))
+                rel = full.relative_to(root).as_posix()
                 if rel.startswith(prefix):
                     results.append(rel)
         return results

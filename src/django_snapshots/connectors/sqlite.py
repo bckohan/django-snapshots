@@ -38,6 +38,12 @@ class SQLiteConnector:
         db_path = django_settings.DATABASES[db_alias]["NAME"]
         try:
             script = src.read_text(encoding="utf-8")
+            # Close Django's connection before acquiring our own — on Windows,
+            # SQLite's exclusive write lock prevents a second connection from
+            # opening the file while Django's handle is still open.
+            from django.db import connections  # noqa: PLC0415
+
+            connections[db_alias].close()
             con = sqlite3.connect(str(db_path))
             # Drop all existing tables so the dump script can recreate them cleanly.
             cur = con.cursor()
