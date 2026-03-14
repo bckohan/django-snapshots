@@ -37,7 +37,15 @@ class MySQLConnector:
         """Dump the MySQL/MariaDB database to *dest* using ``mysqldump``."""
         config = self._db_config(db_alias)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        cmd = ["mysqldump"] + self._base_args(config) + [config["NAME"]]
+        cmd = (
+            ["mysqldump"]
+            + self._base_args(config)
+            + [
+                "--column-statistics=0",  # MariaDB lacks COLUMN_STATISTICS in info_schema
+                "--set-gtid-purged=OFF",  # avoid GTID_PURGED conflicts on restore
+                config["NAME"],
+            ]
+        )
         try:
             with open(dest, "wb") as out:
                 subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE, check=True)
