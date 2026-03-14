@@ -46,7 +46,7 @@ def logged_in_page(page: Page, live_server, admin_user):
 def test_admin_login(logged_in_page: Page, live_server):
     """Verify an admin user can log in and reach the site administration page."""
     expect(logged_in_page).to_have_url(f"{live_server.url}/admin/")
-    expect(logged_in_page.locator("h1")).to_contain_text("Site administration")
+    expect(logged_in_page.get_by_role("heading", name="Site administration")).to_be_visible()
 
 
 # ── Non-browser unittest style tests ────────────────────────────────────────

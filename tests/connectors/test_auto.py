@@ -50,12 +50,14 @@ def test_get_connector_for_alias_uses_settings_override(settings):
 
 @pytest.mark.django_db
 def test_get_connector_for_alias_auto_detects_from_databases(settings):
-    from django_snapshots.connectors.auto import get_connector_for_alias
-    from django_snapshots.connectors.sqlite import SQLiteConnector
+    from django.conf import settings as django_settings
 
-    # tests/settings.py uses sqlite by default
+    from django_snapshots.connectors.auto import get_connector_class, get_connector_for_alias
+
+    engine = django_settings.DATABASES["default"]["ENGINE"]
+    expected_cls = get_connector_class(engine)
     connector = get_connector_for_alias("default")
-    assert isinstance(connector, SQLiteConnector)
+    assert isinstance(connector, expected_cls)
 
 
 def test_auto_detects_postgis():

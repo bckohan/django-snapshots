@@ -205,4 +205,6 @@ exclude_dirs = [
 skips = [
     "B101",  # assert_used - assertions are fine in tests and Django code
     "B110",  # Try, Except, Pass detected - these are intentional
+    "B404",  # import subprocess - required for pg_dump/psql/mysqldump/mysql
+    "B603",  # subprocess_without_shell_equals_true - cmd is a list from trusted config, not user input
 ]

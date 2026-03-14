@@ -288,10 +288,16 @@ def test_settings_invalid_type_raises_type_error(settings):
 
 
 @pytest.mark.django_db
-def test_connector_auto_detected_for_sqlite_alias(settings):
-    """With a SQLite DATABASES config, get_connector_for_alias returns a SQLiteConnector."""
+def test_connector_auto_detected_for_default_alias(settings):
+    """get_connector_for_alias returns a connector matching the configured ENGINE."""
+    from django.conf import settings as django_settings
+
+    from django_snapshots.connectors.auto import get_connector_class
+
+    engine = django_settings.DATABASES["default"]["ENGINE"]
+    expected_cls = get_connector_class(engine)
     connector = get_connector_for_alias("default")
-    assert isinstance(connector, SQLiteConnector)
+    assert isinstance(connector, expected_cls)
 
 
 @pytest.mark.django_db
