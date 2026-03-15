@@ -125,3 +125,6 @@ SITE_ID = 1
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 ROOT_URLCONF = "tests.urls"
+
+# Uses all defaults; normalised to SnapshotSettings on AppConfig.ready()
+SNAPSHOTS: dict[str, object] = {}
