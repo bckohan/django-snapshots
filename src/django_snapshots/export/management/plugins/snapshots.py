@@ -9,9 +9,10 @@ import shutil
 import socket
 import sys
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, List, Optional, cast
+from typing import Annotated, Callable, List, Optional, cast
 
 import django
 import typer
@@ -30,6 +31,32 @@ from django_snapshots.export.artifacts.media import MediaArtifactExporter
 from django_snapshots.management.commands.snapshots import Command as SnapshotsCommand
 from django_snapshots.manifest import ArtifactRecord, Snapshot
 from django_snapshots.settings import SnapshotSettings
+
+
+def _run_async(fn: Callable[[], object]) -> None:
+    """Call ``fn()`` (which returns a coroutine) and run it to completion.
+
+    Falls back to a background thread when an event loop is already running
+    (e.g. inside pytest-playwright), so ``asyncio.run()`` never raises
+    *RuntimeError: asyncio.run() cannot be called from a running event loop*.
+    """
+    try:
+        asyncio.get_running_loop()
+        exc: list[BaseException] = []
+
+        def _target() -> None:
+            try:
+                asyncio.run(fn())  # type: ignore[arg-type]
+            except BaseException as e:  # noqa: BLE001
+                exc.append(e)
+
+        t = threading.Thread(target=_target, daemon=True)
+        t.start()
+        t.join()
+        if exc:
+            raise exc[0]
+    except RuntimeError:
+        asyncio.run(fn())  # type: ignore[arg-type]
 
 
 def _sha256(path: Path) -> str:
@@ -273,7 +300,7 @@ def export_finalize(self, results: list) -> None:  # noqa: ARG001
                     tasks.append(loop.run_in_executor(None, exp.generate, dest))
             await async_tqdm.gather(*tasks, desc="Exporting artifacts")
 
-        asyncio.run(_gather())
+        _run_async(_gather)
 
         # ------------------------------------------------------------------ #
         # 2. Compute checksums and build ArtifactRecord list                  #

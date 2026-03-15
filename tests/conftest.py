@@ -131,6 +131,12 @@ def pytest_collection_modifyitems(
         setattr(config, "_did_install_playwright", True)
         _install_playwright_browsers()
 
+    # Move UI (Playwright) tests to the end so that the event loop they start
+    # does not contaminate asyncio.run() calls in non-UI tests.
+    ui_items = [item for item in items if item.get_closest_marker("ui")]
+    non_ui_items = [item for item in items if not item.get_closest_marker("ui")]
+    items[:] = non_ui_items + ui_items
+
 
 def pytest_configure(config: pytest.Config) -> None:
 
