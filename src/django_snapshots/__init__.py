@@ -24,6 +24,16 @@ __author__ = "Brian Kohan"
 __license__ = "MIT"
 __copyright__ = "Copyright 2026 Brian Kohan"
 
+from django_snapshots.artifacts import (
+    AnyArtifactExporter,
+    AnyArtifactImporter,
+    ArtifactExporter,
+    ArtifactExporterBase,
+    ArtifactImporter,
+    ArtifactImporterBase,
+    AsyncArtifactExporter,
+    AsyncArtifactImporter,
+)
 from django_snapshots.connectors import (
     DatabaseConnector,
     DjangoDumpDataConnector,
@@ -83,4 +93,13 @@ __all__ = [
     "PostgresConnector",
     "MySQLConnector",
     "DjangoDumpDataConnector",
+    # Artifact Protocols
+    "ArtifactExporterBase",
+    "ArtifactExporter",
+    "AsyncArtifactExporter",
+    "AnyArtifactExporter",
+    "ArtifactImporterBase",
+    "ArtifactImporter",
+    "AsyncArtifactImporter",
+    "AnyArtifactImporter",
 ]
