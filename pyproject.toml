@@ -94,7 +94,7 @@ docs = [
 ]
 psycopg2      = ["psycopg2>=2.9.10"]
 psycopg3      = ["psycopg"]
-mysqlclient14 = ["mysqlclient==1.4.3"]
+mysqlclient14 = ["mysqlclient==2.2.8"]
 mysqlclient2x = ["mysqlclient>=2.2.8"]
 cx_oracle     = ["cx-oracle>=8.3.0"]
 oracledb      = ["oracledb>=2.3.0"]
