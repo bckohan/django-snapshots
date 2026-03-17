@@ -18,5 +18,5 @@ Core Commands
 .. toctree::
    :hidden:
 
-   export
-   import
+   backup
+   restore

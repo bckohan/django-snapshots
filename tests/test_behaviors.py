@@ -244,12 +244,6 @@ def test_settings_dict_normalised_to_dataclass(settings):
     assert isinstance(settings.SNAPSHOTS, SnapshotSettings)
 
 
-@pytest.mark.django_db
-def test_settings_default_artifacts_preserved(settings):
-    """Default artifacts list ['database', 'media', 'environment'] is preserved after normalisation."""
-    assert settings.SNAPSHOTS.default_artifacts == ["database", "media", "environment"]
-
-
 def test_settings_dict_with_prune_normalised_correctly():
     """from_dict with a PRUNE dict produces a PruneConfig with the correct values."""
     s = SnapshotSettings.from_dict(

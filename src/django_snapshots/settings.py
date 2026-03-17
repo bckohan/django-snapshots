@@ -69,11 +69,6 @@ class SnapshotSettings:
     snapshot_name: str | Callable[[datetime], str] = "{timestamp_utc}"
     """Template string or callable for generating snapshot names."""
 
-    default_artifacts: list[str] | None = field(
-        default_factory=lambda: ["database", "media", "environment"]
-    )
-    """Artifact subcommands run when no subcommand is specified."""
-
     metadata: dict[str, Any] = field(default_factory=dict)
     """Custom key/value metadata attached to every snapshot manifest."""
 
@@ -88,14 +83,26 @@ class SnapshotSettings:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SnapshotSettings:
+        _known_keys = {
+            "STORAGE",
+            "SNAPSHOT_FORMAT",
+            "SNAPSHOT_NAME",
+            "METADATA",
+            "ENCRYPTION",
+            "DATABASE_CONNECTORS",
+            "PRUNE",
+        }
+        unknown = set(data.keys()) - _known_keys
+        if unknown:
+            raise ValueError(
+                f"Unknown SNAPSHOTS setting key(s): {sorted(unknown)}. "
+                f"Known keys: {sorted(_known_keys)}"
+            )
         prune_data = data.get("PRUNE")
         return cls(
             storage=data.get("STORAGE"),
             snapshot_format=data.get("SNAPSHOT_FORMAT", "directory"),
             snapshot_name=data.get("SNAPSHOT_NAME", "{timestamp_utc}"),
-            default_artifacts=data.get(
-                "DEFAULT_ARTIFACTS", ["database", "media", "environment"]
-            ),
             metadata=data.get("METADATA", {}),
             encryption=data.get("ENCRYPTION"),
             database_connectors=data.get("DATABASE_CONNECTORS", {}),
@@ -107,7 +114,6 @@ class SnapshotSettings:
             "STORAGE": self.storage,
             "SNAPSHOT_FORMAT": self.snapshot_format,
             "SNAPSHOT_NAME": self.snapshot_name,
-            "DEFAULT_ARTIFACTS": self.default_artifacts,
             "METADATA": self.metadata,
             "ENCRYPTION": self.encryption,
             "DATABASE_CONNECTORS": self.database_connectors,

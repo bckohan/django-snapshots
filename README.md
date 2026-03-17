@@ -13,29 +13,18 @@
 
 A generic and pluggable backup and restore management utility for Django.
 
+**This is a placeholder release! This library is under rapid initial development, we do not recommend using it yet!**
+
 ## Installation
 
 ```bash
 pip install django-snapshots
 ```
 
-## Quick Start
-
-TODO: Add quick start example.
-
 ## Documentation
 
 Full documentation is available at [django-snapshots.readthedocs.io](https://django-snapshots.readthedocs.io).
 
-## Development
-
-```bash
-git clone https://github.com/bckohan/django-snapshots.git
-cd django-snapshots
-just setup
-just install
-just test
-```
 
 ## Contributing
 

@@ -1,10 +1,7 @@
-import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.settings")
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import django_snapshots
 
@@ -12,6 +9,9 @@ project = django_snapshots.__title__
 copyright = django_snapshots.__copyright__
 author = django_snapshots.__author__
 release = django_snapshots.__version__
+
+# Configure the path to the Django settings module
+django_settings = "tests.settings"
 
 extensions = [
     "sphinxcontrib_django",
@@ -46,3 +46,7 @@ intersphinx_mapping = {
 }
 
 linkcheck_allow_redirects = True
+
+
+# Use legacy class-based autodoc implementation
+autodoc_use_legacy_class_based = True

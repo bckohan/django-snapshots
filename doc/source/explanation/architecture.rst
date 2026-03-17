@@ -24,23 +24,23 @@ makes third-party extensions trivial to write and test independently.
     settings normalisation, and the ``snapshots`` management command entry-point.
     Always required.
 
-``django_snapshots.export``
-    Export artifact subcommands (``database``, ``media``, ``environment``).
+``django_snapshots.backup``
+    Backup artifact subcommands (``database``, ``media``, ``environment``).
     Can be removed from ``INSTALLED_APPS`` on systems that should never
-    export snapshots.
+    backup snapshots.
 
-``django_snapshots.import``
-    Import artifact subcommands. **Remove this from** ``INSTALLED_APPS`` **in
+``django_snapshots.restore``
+    Restore artifact subcommands. **Remove this from** ``INSTALLED_APPS`` **in
     production** if you want to prevent accidental data overwrites through
     the management command. The underlying code still works when called
     programmatically; only the management command is disabled.
 
-**Command chaining.** The ``export`` and ``import`` groups use
+**Command chaining.** The ``backup`` and ``restore`` groups use
 :func:`django_typer.group` with ``chain=True``, so artifact subcommands can
 be composed freely on the command line::
 
-    django-admin snapshots export database media environment
-    django-admin snapshots import database
+    django-admin snapshots backup database media environment
+    django-admin snapshots restore database
 
 Each subcommand runs independently and the ``@finalize`` step collects all
 artifact promises and resolves them concurrently using :func:`asyncio.gather`.
