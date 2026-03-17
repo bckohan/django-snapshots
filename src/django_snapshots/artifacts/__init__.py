@@ -1,3 +1,7 @@
+from django_snapshots.artifacts.directory import (
+    DirectoryArtifactExporter,
+    DirectoryArtifactImporter,
+)
 from django_snapshots.artifacts.protocols import (
     AnyArtifactExporter,
     AnyArtifactImporter,
@@ -18,4 +22,6 @@ __all__ = [
     "ArtifactImporter",
     "AsyncArtifactImporter",
     "AnyArtifactImporter",
+    "DirectoryArtifactExporter",
+    "DirectoryArtifactImporter",
 ]

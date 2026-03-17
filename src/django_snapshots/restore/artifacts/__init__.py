@@ -1,4 +1,4 @@
-"""Import artifact importers package."""
+"""Restore artifact importers package."""
 
 from .database import DatabaseArtifactImporter
 from .environment import EnvironmentArtifactImporter

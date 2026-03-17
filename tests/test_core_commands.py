@@ -11,18 +11,17 @@ from django_snapshots.settings import PruneConfig, SnapshotSettings
 from django_snapshots.storage.local import LocalFileSystemBackend
 
 
-def _make_settings(tmp_path, *, default_artifacts=None):
+def _make_settings(tmp_path):
     return SnapshotSettings(
         storage=LocalFileSystemBackend(location=str(tmp_path / "storage")),
-        default_artifacts=default_artifacts or ["environment"],
     )
 
 
-def _export_snap(snap_settings, name):
+def _backup_snap(snap_settings, name):
     from django.core.management import call_command
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "export", "--name", name)
+        call_command("snapshots", "backup", "environment", "--name", name)
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +232,7 @@ def test_list_table(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "my-snap")
+    _backup_snap(snap_settings, "my-snap")
 
     with override_settings(SNAPSHOTS=snap_settings):
         call_command("snapshots", "list")
@@ -249,7 +248,7 @@ def test_list_json(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "json-snap")
+    _backup_snap(snap_settings, "json-snap")
     capsys.readouterr()  # discard export output
 
     with override_settings(SNAPSHOTS=snap_settings):
@@ -267,8 +266,8 @@ def test_list_multiple_newest_first(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "first-snap")
-    _export_snap(snap_settings, "second-snap")
+    _backup_snap(snap_settings, "first-snap")
+    _backup_snap(snap_settings, "second-snap")
     capsys.readouterr()  # discard export output
 
     with override_settings(SNAPSHOTS=snap_settings):
@@ -287,7 +286,7 @@ def test_list_yaml_missing_pyyaml(tmp_path, monkeypatch, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "yaml-snap")
+    _backup_snap(snap_settings, "yaml-snap")
 
     real_import = builtins.__import__
 
@@ -315,7 +314,7 @@ def test_delete_named_force(tmp_path):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "to-delete")
+    _backup_snap(snap_settings, "to-delete")
 
     storage = snap_settings.storage
     assert storage.exists("to-delete/manifest.json")
@@ -332,8 +331,8 @@ def test_delete_all_force(tmp_path):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "snap-a")
-    _export_snap(snap_settings, "snap-b")
+    _backup_snap(snap_settings, "snap-a")
+    _backup_snap(snap_settings, "snap-b")
 
     storage = snap_settings.storage
     assert storage.exists("snap-a/manifest.json")
@@ -378,7 +377,7 @@ def test_delete_prompts_and_aborts_when_declined(tmp_path, monkeypatch):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "keep-me")
+    _backup_snap(snap_settings, "keep-me")
 
     monkeypatch.setattr("builtins.input", lambda _: "n")
     storage = snap_settings.storage
@@ -396,8 +395,8 @@ def test_delete_all_prompts_and_aborts_when_declined(tmp_path, monkeypatch):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "snap-x")
-    _export_snap(snap_settings, "snap-y")
+    _backup_snap(snap_settings, "snap-x")
+    _backup_snap(snap_settings, "snap-y")
 
     monkeypatch.setattr("builtins.input", lambda _: "n")
     storage = snap_settings.storage
@@ -422,7 +421,7 @@ def test_info_table(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "info-snap")
+    _backup_snap(snap_settings, "info-snap")
     capsys.readouterr()  # discard export output
 
     with override_settings(SNAPSHOTS=snap_settings):
@@ -440,7 +439,7 @@ def test_info_json(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "info-json-snap")
+    _backup_snap(snap_settings, "info-json-snap")
     capsys.readouterr()  # discard export output
 
     with override_settings(SNAPSHOTS=snap_settings):
@@ -476,7 +475,7 @@ def test_prune_no_policy(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "some-snap")
+    _backup_snap(snap_settings, "some-snap")
 
     with override_settings(SNAPSHOTS=snap_settings):
         call_command("snapshots", "prune")
@@ -491,7 +490,7 @@ def test_prune_nothing_to_prune(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "only-snap")
+    _backup_snap(snap_settings, "only-snap")
 
     with override_settings(SNAPSHOTS=snap_settings):
         call_command("snapshots", "prune", "--keep", "5")
@@ -507,9 +506,9 @@ def test_prune_keep_1_force(tmp_path):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "old-snap")
+    _backup_snap(snap_settings, "old-snap")
     time.sleep(1.1)  # ensure distinct created_at timestamps
-    _export_snap(snap_settings, "new-snap")
+    _backup_snap(snap_settings, "new-snap")
 
     storage = snap_settings.storage
     assert storage.exists("old-snap/manifest.json")
@@ -531,12 +530,11 @@ def test_prune_uses_settings_default(tmp_path):
     snap_settings = _make_settings(tmp_path)
     snap_settings = SnapshotSettings(
         storage=snap_settings.storage,
-        default_artifacts=["environment"],
         prune=PruneConfig(keep=1),
     )
-    _export_snap(snap_settings, "old-snap")
+    _backup_snap(snap_settings, "old-snap")
     time.sleep(1.1)  # ensure distinct created_at timestamps
-    _export_snap(snap_settings, "new-snap")
+    _backup_snap(snap_settings, "new-snap")
 
     storage = snap_settings.storage
 
@@ -553,8 +551,8 @@ def test_prune_prompts_and_aborts_when_declined(tmp_path, monkeypatch, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "keep-this")
-    _export_snap(snap_settings, "and-this")
+    _backup_snap(snap_settings, "keep-this")
+    _backup_snap(snap_settings, "and-this")
 
     monkeypatch.setattr("builtins.input", lambda _: "n")
     storage = snap_settings.storage
@@ -579,7 +577,7 @@ def test_check_matching_env(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "match-snap")
+    _backup_snap(snap_settings, "match-snap")
     capsys.readouterr()  # discard export output
 
     with override_settings(SNAPSHOTS=snap_settings):
@@ -596,10 +594,10 @@ def test_check_latest_resolution(tmp_path, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "older-snap")
+    _backup_snap(snap_settings, "older-snap")
     capsys.readouterr()  # discard export output
     time.sleep(1.1)  # ensure distinct created_at timestamps
-    _export_snap(snap_settings, "latest-snap")
+    _backup_snap(snap_settings, "latest-snap")
     capsys.readouterr()  # discard export output
 
     with override_settings(SNAPSHOTS=snap_settings):
@@ -615,7 +613,7 @@ def test_check_strict_exits_1_on_diff(tmp_path, monkeypatch):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "diff-snap")
+    _backup_snap(snap_settings, "diff-snap")
 
     # Patch _pip_freeze to return a different set of packages
     monkeypatch.setattr(
@@ -635,7 +633,7 @@ def test_check_no_strict_exits_0_on_diff(tmp_path, monkeypatch, capsys):
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
-    _export_snap(snap_settings, "diff-snap2")
+    _backup_snap(snap_settings, "diff-snap2")
     capsys.readouterr()  # discard export output
 
     monkeypatch.setattr(

@@ -2,10 +2,10 @@ from django.apps import AppConfig
 from django_typer.utils import register_command_plugins
 
 
-class SnapshotsImportConfig(AppConfig):
-    name = "django_snapshots.import"
-    label = "snapshots_import"
-    verbose_name = "Snapshots Import"
+class SnapshotsBackupConfig(AppConfig):
+    name = "django_snapshots.backup"
+    label = "snapshots_backup"
+    verbose_name = "Snapshots Backup"
 
     def ready(self):
         from .management import plugins

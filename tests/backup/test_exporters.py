@@ -61,7 +61,7 @@ def test_database_exporter_generates_gzip_sql(tmp_path, django_user_model):
     """DatabaseArtifactExporter produces a non-empty .sql.gz file."""
     import gzip
 
-    from django_snapshots.export.artifacts.database import DatabaseArtifactExporter
+    from django_snapshots.backup.artifacts.database import DatabaseArtifactExporter
 
     django_user_model.objects.create_user(username="dbexport_test", password="x")
     exp = DatabaseArtifactExporter(db_alias="default")
@@ -88,7 +88,7 @@ def test_database_exporter_generates_gzip_sql(tmp_path, django_user_model):
 )
 @pytest.mark.django_db(transaction=True)
 def test_database_exporter_metadata_includes_connector_path(tmp_path):
-    from django_snapshots.export.artifacts.database import DatabaseArtifactExporter
+    from django_snapshots.backup.artifacts.database import DatabaseArtifactExporter
 
     exp = DatabaseArtifactExporter(db_alias="default")
     dest = tmp_path / exp.filename
@@ -108,18 +108,18 @@ def test_media_exporter_creates_targz(tmp_path):
     """MediaArtifactExporter creates a .tar.gz regardless of whether MEDIA_ROOT exists."""
     import tarfile
 
-    from django_snapshots.export.artifacts.media import MediaArtifactExporter
+    from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 
     # Create a fake media root with a file in it
     media_root = tmp_path / "media"
     media_root.mkdir()
     (media_root / "image.png").write_bytes(b"\x89PNG")
 
-    exp = MediaArtifactExporter(media_root=str(media_root))
+    exp = MediaArtifactExporter(directory=str(media_root))
 
     assert exp.artifact_type == "media"
     assert exp.filename == "media.tar.gz"
-    assert exp.metadata["media_root"] == str(media_root)
+    assert exp.metadata["directory"] == str(media_root)
 
     dest = tmp_path / exp.filename
     # Call the sync implementation directly to avoid asyncio.run() conflicts
@@ -137,10 +137,10 @@ def test_media_exporter_empty_media_root_creates_valid_archive(tmp_path):
     """MediaArtifactExporter succeeds even when MEDIA_ROOT is empty or missing."""
     import tarfile
 
-    from django_snapshots.export.artifacts.media import MediaArtifactExporter
+    from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 
     missing = tmp_path / "missing_media"
-    exp = MediaArtifactExporter(media_root=str(missing))
+    exp = MediaArtifactExporter(directory=str(missing))
     dest = tmp_path / exp.filename
     exp._create_tar(dest)
 
@@ -157,7 +157,7 @@ def test_media_exporter_empty_media_root_creates_valid_archive(tmp_path):
 
 def test_environment_exporter_produces_requirements_txt(tmp_path):
     """EnvironmentArtifactExporter writes a non-empty requirements.txt."""
-    from django_snapshots.export.artifacts.environment import (
+    from django_snapshots.backup.artifacts.environment import (
         EnvironmentArtifactExporter,
     )
 
@@ -178,7 +178,7 @@ def test_environment_exporter_produces_requirements_txt(tmp_path):
 
 def test_environment_exporter_satisfies_artifact_exporter_protocol():
     from django_snapshots.artifacts.protocols import ArtifactExporter
-    from django_snapshots.export.artifacts.environment import (
+    from django_snapshots.backup.artifacts.environment import (
         EnvironmentArtifactExporter,
     )
 

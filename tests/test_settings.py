@@ -8,7 +8,6 @@ def test_snapshot_settings_defaults():
     s = SnapshotSettings()
     assert s.snapshot_format == "directory"
     assert s.snapshot_name == "{timestamp_utc}"
-    assert s.default_artifacts == ["database", "media", "environment"]
     assert s.metadata == {}
     assert s.encryption is None
     assert s.database_connectors == {}
@@ -49,13 +48,11 @@ def test_snapshot_settings_from_dict():
 
     data = {
         "SNAPSHOT_FORMAT": "archive",
-        "DEFAULT_ARTIFACTS": ["database"],
         "METADATA": {"env": "production"},
         "PRUNE": {"keep": 5, "keep_daily": 3, "keep_weekly": 2},
     }
     s = SnapshotSettings.from_dict(data)
     assert s.snapshot_format == "archive"
-    assert s.default_artifacts == ["database"]
     assert s.metadata == {"env": "production"}
     assert s.prune.keep == 5
     assert s.prune.keep_daily == 3
@@ -67,13 +64,18 @@ def test_snapshot_settings_roundtrip():
 
     s = SnapshotSettings(
         snapshot_format="archive",
-        default_artifacts=["database", "media"],
         prune=PruneConfig(keep=10, keep_daily=7, keep_weekly=4),
     )
     s2 = SnapshotSettings.from_dict(s.to_dict())
     assert s2.snapshot_format == s.snapshot_format
-    assert s2.default_artifacts == s.default_artifacts
     assert s2.prune.keep == s.prune.keep
+
+
+def test_from_dict_raises_on_unknown_key():
+    from django_snapshots.settings import SnapshotSettings
+
+    with pytest.raises(ValueError, match="Unknown SNAPSHOTS setting key"):
+        SnapshotSettings.from_dict({"DEFAULT_ARTIFACTS": ["database"]})
 
 
 def test_snapshot_name_callable_accepted():

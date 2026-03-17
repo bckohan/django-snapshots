@@ -1,4 +1,4 @@
-"""Import command group — registered as a plugin on the root ``snapshots`` command."""
+"""Restore command group — registered as a plugin on the root ``snapshots`` command."""
 
 from __future__ import annotations
 
@@ -8,18 +8,17 @@ import json
 import shutil
 import sys
 import tempfile
-import threading
 from pathlib import Path
-from typing import Annotated, Callable, List, Optional, cast
+from typing import Annotated, List, Optional, cast
 
 import typer
+from asyncer import syncify
 from django.conf import settings as django_settings
 from django.utils.translation import gettext_lazy as _
 from tqdm.asyncio import tqdm as async_tqdm
 
 from django_snapshots.exceptions import (
     SnapshotEncryptionError,
-    SnapshotError,
     SnapshotIntegrityError,
     SnapshotNotFoundError,
 )
@@ -30,34 +29,6 @@ from django_snapshots.settings import SnapshotSettings
 from ...artifacts.database import DatabaseArtifactImporter
 from ...artifacts.environment import EnvironmentArtifactImporter
 from ...artifacts.media import MediaArtifactImporter
-
-
-def _run_async(fn: Callable[[], object]) -> None:
-    """Call ``fn()`` (which returns a coroutine) and run it to completion.
-
-    Falls back to a background thread when an event loop is already running
-    (e.g. inside pytest-playwright), so ``asyncio.run()`` never raises
-    *RuntimeError: asyncio.run() cannot be called from a running event loop*.
-    """
-    try:
-        asyncio.get_running_loop()
-        # Already inside a running loop — run in a dedicated thread.
-        exc: list[BaseException] = []
-
-        def _target() -> None:
-            try:
-                asyncio.run(fn())  # type: ignore[arg-type]
-            except BaseException as e:  # noqa: BLE001
-                exc.append(e)
-
-        t = threading.Thread(target=_target, daemon=True)
-        t.start()
-        t.join()
-        if exc:
-            raise exc[0]
-    except RuntimeError:
-        # No running loop — safe to use asyncio.run() directly.
-        asyncio.run(fn())  # type: ignore[arg-type]
 
 
 def _sha256(path: Path) -> str:
@@ -93,21 +64,6 @@ def _resolve_latest(storage) -> str:
     return snapshots[0][1]
 
 
-def _init_import_state(self, name: Optional[str]) -> None:
-    if not getattr(self, "_import_initialised", False):
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        self._import_storage = snap_settings.storage
-        self._import_name = name
-        self._importers = []
-        self._import_temp_dir = Path(
-            tempfile.mkdtemp(prefix="django_snapshots_import_")
-        )
-        self._import_initialised = True
-    else:
-        if name is not None:
-            self._import_name = name
-
-
 def _create_database_importers(
     snapshot: Snapshot, databases: Optional[list[str]] = None
 ) -> list[DatabaseArtifactImporter]:
@@ -123,12 +79,12 @@ def _create_database_importers(
 
 
 @SnapshotsCommand.group(
-    name="import",
+    name="restore",
     invoke_without_command=True,
     chain=True,
-    help=str(_("Import a snapshot")),
+    help=str(_("Restore a snapshot")),
 )
-def import_cmd(
+def restore(
     self,
     ctx: typer.Context,
     name: Annotated[
@@ -136,10 +92,27 @@ def import_cmd(
         typer.Option(help=str(_("Snapshot name (default: latest)"))),
     ] = None,
 ) -> None:
-    _init_import_state(self, name=name)
+    """Initialise restore state and load manifest (runs before any subcommand)."""
+    snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
+    self._restore_storage = snap_settings.storage
+    self._importers = []
+    self._restore_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_restore_"))
+    try:
+        resolved_name = name or _resolve_latest(self._restore_storage)
+        if not self._restore_storage.exists(f"{resolved_name}/manifest.json"):
+            raise SnapshotNotFoundError(
+                f"Snapshot {resolved_name!r} not found in storage "
+                f"(missing '{resolved_name}/manifest.json')."
+            )
+        with self._restore_storage.read(f"{resolved_name}/manifest.json") as f:
+            self._restore_snapshot = Snapshot.from_dict(json.load(f))
+        self._restore_name = resolved_name
+    except Exception:
+        shutil.rmtree(self._restore_temp_dir, ignore_errors=True)
+        raise
 
 
-@import_cmd.command(help=str(_("Restore database(s) from compressed SQL dumps")))
+@restore.command(help=str(_("Restore database(s) from compressed SQL dumps")))
 def database(
     self,
     name: Annotated[
@@ -154,11 +127,24 @@ def database(
         ),
     ] = None,
 ) -> None:
-    _init_import_state(self, name=name)
-    self._importers.append(_DatabasePlaceholder(databases=databases))
+    if name is not None:
+        # User wants a different snapshot — re-resolve
+        if not self._restore_storage.exists(f"{name}/manifest.json"):
+            raise SnapshotNotFoundError(
+                f"Snapshot {name!r} not found in storage "
+                f"(missing '{name}/manifest.json')."
+            )
+        self._restore_name = name
+        with self._restore_storage.read(f"{name}/manifest.json") as f:
+            self._restore_snapshot = Snapshot.from_dict(json.load(f))
+    importers = _create_database_importers(self._restore_snapshot, databases=databases)
+    self._importers.extend(importers)
+    if sys.stdin.isatty():
+        aliases = [i.db_alias for i in importers]
+        typer.echo(f"  Databases : {', '.join(aliases)}")
 
 
-@import_cmd.command(help=str(_("Restore MEDIA_ROOT from compressed tarball")))
+@restore.command(help=str(_("Restore MEDIA_ROOT from compressed tarball")))
 def media(
     self,
     name: Annotated[
@@ -177,13 +163,17 @@ def media(
         ),
     ] = False,
 ) -> None:
-    _init_import_state(self, name=name)
+    if name is not None:
+        self._restore_name = name
     self._importers.append(
-        MediaArtifactImporter(media_root=media_root or "", merge=merge)
+        MediaArtifactImporter(directory=media_root or "", merge=merge)
     )
+    if sys.stdin.isatty():
+        imp = self._importers[-1]
+        typer.echo(f"  Directory : {imp.directory}")
 
 
-@import_cmd.command(help=str(_("Show diff between snapshot environment and current")))
+@restore.command(help=str(_("Show diff between snapshot environment and current")))
 def environment(
     self,
     name: Annotated[
@@ -197,39 +187,19 @@ def environment(
         ),
     ] = False,
 ) -> None:
-    _init_import_state(self, name=name)
+    if name is not None:
+        self._restore_name = name
     self._importers.append(EnvironmentArtifactImporter(check_only=check_only))
+    if sys.stdin.isatty():
+        typer.echo("  Environment: will check pip diff")
 
 
-class _DatabasePlaceholder:
-    artifact_type = "database"
-
-    def __init__(self, databases: Optional[list[str]]) -> None:
-        self.databases = databases
-
-
-@import_cmd.finalize()
-def import_finalize(self, results: list) -> None:  # noqa: ARG001
+@restore.finalize()
+def restore_finalize(self, results: list) -> None:  # noqa: ARG001
     try:
-        if not getattr(self, "_import_initialised", False):
-            _init_import_state(self, name=None)
-
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        storage = self._import_storage
-
-        # Step 1: Resolve snapshot name
-        name = self._import_name
-        if name is None:
-            name = _resolve_latest(storage)
-        elif not storage.exists(f"{name}/manifest.json"):
-            raise SnapshotNotFoundError(
-                f"Snapshot {name!r} not found in storage "
-                f"(missing '{name}/manifest.json')."
-            )
-
-        # Step 2: Read and validate manifest
-        with storage.read(f"{name}/manifest.json") as f:
-            snapshot = Snapshot.from_dict(json.load(f))
+        storage = self._restore_storage
+        name = self._restore_name
+        snapshot = self._restore_snapshot
 
         if snapshot.encrypted:
             raise SnapshotEncryptionError(
@@ -238,37 +208,13 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
 
         artifact_map = {a.filename: a for a in snapshot.artifacts}
 
-        # Step 3: Materialise placeholders and handle no-subcommand default
-        raw_importers = list(self._importers)
+        # Step 3: Handle no-subcommand default — invoke all registered children
+        if not self._importers:
+            restore_group = self.get_subcommand("restore")
+            for _child_name, child_cmd in restore_group.children.items():
+                child_cmd()
 
-        if not raw_importers:
-            defaults = snap_settings.default_artifacts or [
-                "database",
-                "media",
-                "environment",
-            ]
-            _factories = {
-                "database": lambda: _create_database_importers(snapshot),
-                "media": lambda: [MediaArtifactImporter(media_root="")],
-                "environment": lambda: [EnvironmentArtifactImporter()],
-            }
-            for artifact_name in defaults:
-                if artifact_name not in _factories:
-                    raise SnapshotError(
-                        f"Unknown default artifact {artifact_name!r}. "
-                        f"Registered: {list(_factories)}"
-                    )
-                self._importers.extend(_factories[artifact_name]())
-            raw_importers = list(self._importers)
-
-        importers: list = []
-        for imp in raw_importers:
-            if isinstance(imp, _DatabasePlaceholder):
-                importers.extend(
-                    _create_database_importers(snapshot, databases=imp.databases)
-                )
-            else:
-                importers.append(imp)
+        importers: list = list(self._importers)
 
         # Handle --check-only
         check_only_imp = next(
@@ -284,7 +230,7 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
                 (a for a in snapshot.artifacts if a.type == "environment"), None
             )
             if env_art:
-                env_dest = self._import_temp_dir / env_art.filename
+                env_dest = self._restore_temp_dir / env_art.filename
                 with storage.read(f"{name}/{env_art.filename}") as f:
                     env_dest.write_bytes(f.read())
                 check_only_imp.restore(env_dest)
@@ -292,19 +238,7 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
 
         # Step 4: Confirmation prompt (TTY only)
         if sys.stdin.isatty():
-            db_aliases = [
-                i.db_alias for i in importers if isinstance(i, DatabaseArtifactImporter)
-            ]
-            media_roots = [
-                i.media_root for i in importers if isinstance(i, MediaArtifactImporter)
-            ]
-            lines = [f"Restore snapshot {name!r}?"]
-            if db_aliases:
-                lines.append(f"  Databases : {', '.join(db_aliases)}")
-            if media_roots:
-                lines.append(f"  MEDIA_ROOT: {', '.join(media_roots)}")
-            lines.append("Continue? [y/N] ")
-            answer = input("\n".join(lines))
+            answer = input(f"Restore snapshot {name!r}? Continue? [y/N] ")
             if answer.strip().lower() != "y":
                 raise SystemExit(0)
 
@@ -330,17 +264,17 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
             loop = asyncio.get_running_loop()
             tasks = [
                 loop.run_in_executor(
-                    None, _download_one, filename, self._import_temp_dir / filename
+                    None, _download_one, filename, self._restore_temp_dir / filename
                 )
                 for _, filename in pairs
             ]
             await async_tqdm.gather(*tasks, desc="Downloading artifacts")
 
-        _run_async(_gather_downloads)
+        syncify(_gather_downloads, raise_sync_error=False)()
 
         # Step 6: Verify checksums (all-or-nothing)
         for _, filename in pairs:
-            dest = self._import_temp_dir / filename
+            dest = self._restore_temp_dir / filename
             expected = artifact_map[filename].checksum
             actual = f"sha256:{_sha256(dest)}"
             if actual != expected:
@@ -354,20 +288,19 @@ def import_finalize(self, results: list) -> None:  # noqa: ARG001
             loop = asyncio.get_running_loop()
             tasks = []
             for imp, filename in pairs:
-                src = self._import_temp_dir / filename
+                src = self._restore_temp_dir / filename
                 if asyncio.iscoroutinefunction(imp.restore):
                     tasks.append(imp.restore(src))
                 else:
                     tasks.append(loop.run_in_executor(None, imp.restore, src))
             await async_tqdm.gather(*tasks, desc="Restoring artifacts")
 
-        _run_async(_gather_restores)
+        syncify(_gather_restores, raise_sync_error=False)()
 
         typer.echo(f"Snapshot restored: {name}")
 
     finally:
         shutil.rmtree(
-            getattr(self, "_import_temp_dir", None) or Path("/nonexistent"),
+            getattr(self, "_restore_temp_dir", None) or Path("/nonexistent"),
             ignore_errors=True,
         )
-        self._import_initialised = False

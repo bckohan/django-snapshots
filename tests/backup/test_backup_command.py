@@ -15,7 +15,6 @@ from django_snapshots.storage.local import LocalFileSystemBackend
 def _make_settings(tmp_path):
     return SnapshotSettings(
         storage=LocalFileSystemBackend(location=str(tmp_path / "storage")),
-        default_artifacts=["database", "environment"],  # skip media in tests
     )
 
 
@@ -32,7 +31,7 @@ def test_export_database_subcommand_creates_artifact(tmp_path, django_user_model
     django_user_model.objects.create_user(username="exptest", password="x")
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "export", "database", "--name", "snap1")
+        call_command("snapshots", "backup", "database", "--name", "snap1")
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))
     assert storage.exists("snap1/manifest.json")
@@ -54,23 +53,23 @@ def test_export_database_subcommand_creates_artifact(tmp_path, django_user_model
     reason="SQLite round-trip only",
 )
 @pytest.mark.django_db(transaction=True)
-def test_export_without_subcommand_uses_default_artifacts(tmp_path):
-    """Running `snapshots export` without a subcommand uses DEFAULT_ARTIFACTS."""
+def test_backup_without_subcommand_runs_all_registered_children(tmp_path):
+    """Running `snapshots backup` without a subcommand invokes all registered children."""
     from django.core.management import call_command
 
     snap_settings = _make_settings(tmp_path)
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "export", "--name", "snap-default")
+        call_command("snapshots", "backup", "--name", "snap-default")
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))
     assert storage.exists("snap-default/manifest.json")
-    # DEFAULT_ARTIFACTS = ["database", "environment"]
+    # All registered children: database, media, environment
     assert storage.exists("snap-default/default.sql.gz")
     assert storage.exists("snap-default/requirements.txt")
 
     manifest = json.loads(storage.read("snap-default/manifest.json").read())
-    assert len(manifest["artifacts"]) == 2
+    assert len(manifest["artifacts"]) >= 2
 
 
 @pytest.mark.django_db(transaction=True)
@@ -83,9 +82,9 @@ def test_export_raises_on_duplicate_name(tmp_path):
     snap_settings = _make_settings(tmp_path)
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "export", "environment", "--name", "dup")
+        call_command("snapshots", "backup", "environment", "--name", "dup")
         with pytest.raises((SnapshotExistsError, SystemExit)):
-            call_command("snapshots", "export", "environment", "--name", "dup")
+            call_command("snapshots", "backup", "environment", "--name", "dup")
 
 
 @pytest.mark.django_db(transaction=True)
@@ -96,11 +95,11 @@ def test_export_overwrite_replaces_existing_snapshot(tmp_path):
     snap_settings = _make_settings(tmp_path)
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "export", "environment", "--name", "overwritable")
+        call_command("snapshots", "backup", "environment", "--name", "overwritable")
         # Should not raise:
         call_command(
             "snapshots",
-            "export",
+            "backup",
             "environment",
             "--name",
             "overwritable",
@@ -124,7 +123,7 @@ def test_export_chained_database_and_environment(tmp_path):
 
     with override_settings(SNAPSHOTS=snap_settings):
         call_command(
-            "snapshots", "export", "database", "environment", "--name", "chained"
+            "snapshots", "backup", "database", "environment", "--name", "chained"
         )
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))
@@ -148,11 +147,10 @@ def test_export_manifest_structure(tmp_path):
 
     snap_settings = SnapshotSettings(
         storage=LocalFileSystemBackend(location=str(tmp_path / "storage")),
-        default_artifacts=["environment"],
     )
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "export", "--name", "struct-test")
+        call_command("snapshots", "backup", "environment", "--name", "struct-test")
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))
     manifest = json.loads(storage.read("struct-test/manifest.json").read())
@@ -178,11 +176,10 @@ def test_export_checksum_matches_artifact_content(tmp_path):
 
     snap_settings = SnapshotSettings(
         storage=LocalFileSystemBackend(location=str(tmp_path / "storage")),
-        default_artifacts=["environment"],
     )
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "export", "--name", "checksum-test")
+        call_command("snapshots", "backup", "environment", "--name", "checksum-test")
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))
     manifest = json.loads(storage.read("checksum-test/manifest.json").read())
@@ -214,7 +211,7 @@ def test_export_database_connector_override(tmp_path):
     with override_settings(SNAPSHOTS=snap_settings):
         call_command(
             "snapshots",
-            "export",
+            "backup",
             "database",
             "--connector",
             connector_path,

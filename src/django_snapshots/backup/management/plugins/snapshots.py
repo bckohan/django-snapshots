@@ -1,4 +1,4 @@
-"""Export command group — registered as a plugin on the root ``snapshots`` command."""
+"""Backup command group — registered as a plugin on the root ``snapshots`` command."""
 
 from __future__ import annotations
 
@@ -9,54 +9,28 @@ import shutil
 import socket
 import sys
 import tempfile
-import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Callable, List, Optional, cast
+from typing import Annotated, List, Optional, cast
 
 import django
 import typer
+from asyncer import syncify
 from django.conf import settings as django_settings
 from django.utils.translation import gettext_lazy as _
 from tqdm.asyncio import tqdm as async_tqdm
 
 from django_snapshots.artifacts.protocols import AnyArtifactExporter
-from django_snapshots.exceptions import SnapshotExistsError
-from django_snapshots.export.artifacts.database import DatabaseArtifactExporter
-from django_snapshots.export.artifacts.environment import (
+from django_snapshots.backup.artifacts.database import DatabaseArtifactExporter
+from django_snapshots.backup.artifacts.environment import (
     EnvironmentArtifactExporter,
     _pip_freeze,
 )
-from django_snapshots.export.artifacts.media import MediaArtifactExporter
+from django_snapshots.backup.artifacts.media import MediaArtifactExporter
+from django_snapshots.exceptions import SnapshotExistsError
 from django_snapshots.management.commands.snapshots import Command as SnapshotsCommand
 from django_snapshots.manifest import ArtifactRecord, Snapshot
 from django_snapshots.settings import SnapshotSettings
-
-
-def _run_async(fn: Callable[[], object]) -> None:
-    """Call ``fn()`` (which returns a coroutine) and run it to completion.
-
-    Falls back to a background thread when an event loop is already running
-    (e.g. inside pytest-playwright), so ``asyncio.run()`` never raises
-    *RuntimeError: asyncio.run() cannot be called from a running event loop*.
-    """
-    try:
-        asyncio.get_running_loop()
-        exc: list[BaseException] = []
-
-        def _target() -> None:
-            try:
-                asyncio.run(fn())  # type: ignore[arg-type]
-            except BaseException as e:  # noqa: BLE001
-                exc.append(e)
-
-        t = threading.Thread(target=_target, daemon=True)
-        t.start()
-        t.join()
-        if exc:
-            raise exc[0]
-    except RuntimeError:
-        asyncio.run(fn())  # type: ignore[arg-type]
 
 
 def _sha256(path: Path) -> str:
@@ -68,52 +42,18 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _init_export_state(
-    self,
-    name: Optional[str],
-    overwrite: bool,
-) -> None:
-    """Initialise shared export state on *self*. Safe to call multiple times.
-
-    The first call sets all defaults.  Subsequent calls (from subcommands) may
-    override ``_export_name`` and ``_export_overwrite`` when explicit (non-None /
-    truthy) values are supplied, so that e.g.
-    ``snapshots export database --name foo`` works even though the group
-    callback ran first with ``name=None``.
-    """
-    if not getattr(self, "_export_initialised", False):
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        self._export_storage = snap_settings.storage
-        self._export_overwrite = overwrite
-
-        now = datetime.now(timezone.utc)
-        self._export_created_at = now
-        self._export_name = name or now.strftime("%Y-%m-%dT%H-%M-%S-UTC")
-        self._exporters = cast(list[AnyArtifactExporter], [])
-        self._export_temp_dir = Path(
-            tempfile.mkdtemp(prefix="django_snapshots_export_")
-        )
-        self._export_initialised = True
-    else:
-        # Allow subcommands to override name and overwrite from the group default
-        if name is not None:
-            self._export_name = name
-        if overwrite:
-            self._export_overwrite = overwrite
-
-
 # ---------------------------------------------------------------------------
-# Export group — invoked before any subcommand, handles the no-subcommand case
+# Backup group — invoked before any subcommand, handles the no-subcommand case
 # ---------------------------------------------------------------------------
 
 
 @SnapshotsCommand.group(
-    name="export",
+    name="backup",
     invoke_without_command=True,
     chain=True,
-    help=_("Export a snapshot"),
+    help=_("Backup a snapshot"),
 )
-def export(
+def backup(
     self,
     ctx: typer.Context,
     name: Annotated[
@@ -127,8 +67,16 @@ def export(
         ),
     ] = False,
 ) -> None:
-    """Initialise export state (runs before any subcommand)."""
-    _init_export_state(self, name=name, overwrite=overwrite)
+    """Initialise backup state (runs before any subcommand)."""
+    snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
+    self._backup_storage = snap_settings.storage
+    self._backup_overwrite = overwrite
+
+    now = datetime.now(timezone.utc)
+    self._backup_created_at = now
+    self._backup_name = name or now.strftime("%Y-%m-%dT%H-%M-%S-UTC")
+    self._exporters = cast(list[AnyArtifactExporter], [])
+    self._backup_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_backup_"))
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +105,7 @@ def _add_media_exporters(
     self,
     media_root: Optional[str] = None,
 ) -> None:
-    self._exporters.append(MediaArtifactExporter(media_root=media_root or ""))
+    self._exporters.append(MediaArtifactExporter(directory=media_root or ""))
 
 
 def _add_environment_exporters(self) -> None:
@@ -166,11 +114,11 @@ def _add_environment_exporters(self) -> None:
 
 # ---------------------------------------------------------------------------
 # Artifact subcommands — each accepts --name and --overwrite so that
-# ``snapshots export database --name foo`` works (option after subcommand).
+# ``snapshots backup database --name foo`` works (option after subcommand).
 # ---------------------------------------------------------------------------
 
 
-@export.command(help=_("Export database(s) as compressed SQL dumps"))
+@backup.command(help=_("Export database(s) as compressed SQL dumps"))
 def database(
     self,
     name: Annotated[
@@ -195,11 +143,14 @@ def database(
         ),
     ] = None,
 ) -> None:
-    _init_export_state(self, name=name, overwrite=overwrite)
+    if name is not None:
+        self._backup_name = name
+    if overwrite:
+        self._backup_overwrite = overwrite
     _add_database_exporters(self, databases=databases, connector=connector)
 
 
-@export.command(help=_("Export MEDIA_ROOT as a compressed tarball"))
+@backup.command(help=_("Export MEDIA_ROOT as a compressed tarball"))
 def media(
     self,
     name: Annotated[
@@ -217,11 +168,14 @@ def media(
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT path"))),
     ] = None,
 ) -> None:
-    _init_export_state(self, name=name, overwrite=overwrite)
+    if name is not None:
+        self._backup_name = name
+    if overwrite:
+        self._backup_overwrite = overwrite
     _add_media_exporters(self, media_root=media_root)
 
 
-@export.command(help=_("Capture the current Python environment (pip freeze)"))
+@backup.command(help=_("Capture the current Python environment (pip freeze)"))
 def environment(
     self,
     name: Annotated[
@@ -235,7 +189,10 @@ def environment(
         ),
     ] = False,
 ) -> None:
-    _init_export_state(self, name=name, overwrite=overwrite)
+    if name is not None:
+        self._backup_name = name
+    if overwrite:
+        self._backup_overwrite = overwrite
     _add_environment_exporters(self)
 
 
@@ -244,46 +201,25 @@ def environment(
 # ---------------------------------------------------------------------------
 
 
-@export.finalize()
-def export_finalize(self, results: list) -> None:  # noqa: ARG001
+@backup.finalize()
+def backup_finalize(self, results: list) -> None:  # noqa: ARG001
     """Check for collision, generate artifacts, compute checksums, write manifest."""
     try:
-        # Guard: _init_export_state should always have been called by now
-        if not getattr(self, "_export_initialised", False):
-            _init_export_state(self, name=None, overwrite=False)
-
         exporters = list(self._exporters)
 
         # Check for name collision (deferred to finalize so --name on subcommand works)
-        manifest_path = f"{self._export_name}/manifest.json"
-        if not self._export_overwrite and self._export_storage.exists(manifest_path):
+        manifest_path = f"{self._backup_name}/manifest.json"
+        if not self._backup_overwrite and self._backup_storage.exists(manifest_path):
             raise SnapshotExistsError(
-                f"Snapshot {self._export_name!r} already exists. "
+                f"Snapshot {self._backup_name!r} already exists. "
                 "Use --overwrite to replace it."
             )
 
-        # If no subcommands ran (invoke_without_command), use default_artifacts
+        # If no subcommands ran (invoke_without_command), invoke all registered children
         if not exporters:
-            snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-            defaults = snap_settings.default_artifacts or [
-                "database",
-                "media",
-                "environment",
-            ]
-            _factories = {
-                "database": lambda: _add_database_exporters(self),
-                "media": lambda: _add_media_exporters(self),
-                "environment": lambda: _add_environment_exporters(self),
-            }
-            for artifact_name in defaults:
-                if artifact_name not in _factories:
-                    from django_snapshots.exceptions import SnapshotError
-
-                    raise SnapshotError(
-                        f"Unknown default artifact {artifact_name!r}. "
-                        f"Registered: {list(_factories)}"
-                    )
-                _factories[artifact_name]()
+            backup_group = self.get_subcommand("backup")
+            for _child_name, child_cmd in backup_group.children.items():
+                child_cmd()
             exporters = list(self._exporters)
 
         # ------------------------------------------------------------------ #
@@ -293,21 +229,21 @@ def export_finalize(self, results: list) -> None:  # noqa: ARG001
             loop = asyncio.get_running_loop()
             tasks = []
             for exp in exporters:
-                dest = self._export_temp_dir / exp.filename
+                dest = self._backup_temp_dir / exp.filename
                 if asyncio.iscoroutinefunction(exp.generate):
                     tasks.append(exp.generate(dest))
                 else:
                     tasks.append(loop.run_in_executor(None, exp.generate, dest))
             await async_tqdm.gather(*tasks, desc="Exporting artifacts")
 
-        _run_async(_gather)
+        syncify(_gather, raise_sync_error=False)()
 
         # ------------------------------------------------------------------ #
         # 2. Compute checksums and build ArtifactRecord list                  #
         # ------------------------------------------------------------------ #
         artifact_records: list[ArtifactRecord] = []
         for exp in exporters:
-            dest = self._export_temp_dir / exp.filename
+            dest = self._backup_temp_dir / exp.filename
             checksum = _sha256(dest)
             artifact_records.append(
                 ArtifactRecord(
@@ -325,8 +261,8 @@ def export_finalize(self, results: list) -> None:  # noqa: ARG001
         # ------------------------------------------------------------------ #
         snapshot = Snapshot(
             version="1",
-            name=self._export_name,
-            created_at=self._export_created_at,
+            name=self._backup_name,
+            created_at=self._backup_created_at,
             django_version=django.get_version(),
             python_version=sys.version.split()[0],
             hostname=socket.gethostname(),
@@ -335,7 +271,7 @@ def export_finalize(self, results: list) -> None:  # noqa: ARG001
             metadata=dict(getattr(django_settings.SNAPSHOTS, "metadata", {})),
             artifacts=artifact_records,
         )
-        manifest_dest = self._export_temp_dir / "manifest.json"
+        manifest_dest = self._backup_temp_dir / "manifest.json"
         manifest_dest.write_text(
             json.dumps(snapshot.to_dict(), indent=2),
             encoding="utf-8",
@@ -349,16 +285,14 @@ def export_finalize(self, results: list) -> None:  # noqa: ARG001
         # the storage directory may contain artifact files without a manifest.json,
         # leaving it in a state that will pass the collision guard on retry.
         # Full atomic upload support requires a storage backend with transaction semantics.
-        for file_path in sorted(self._export_temp_dir.iterdir()):
+        for file_path in sorted(self._backup_temp_dir.iterdir()):
             with open(file_path, "rb") as f:
-                self._export_storage.write(f"{self._export_name}/{file_path.name}", f)
+                self._backup_storage.write(f"{self._backup_name}/{file_path.name}", f)
 
-        typer.echo(f"Snapshot complete: {self._export_name}")
+        typer.echo(f"Snapshot complete: {self._backup_name}")
 
     finally:
         shutil.rmtree(
-            getattr(self, "_export_temp_dir", None) or Path("/nonexistent"),
+            getattr(self, "_backup_temp_dir", None) or Path("/nonexistent"),
             ignore_errors=True,
         )
-        # Reset initialised flag for any potential re-use
-        self._export_initialised = False

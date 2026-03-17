@@ -23,7 +23,7 @@ import pytest
 
 def _import_database_importer():
     """Import DatabaseArtifactImporter via importlib (avoids 'import' keyword issue)."""
-    mod = importlib.import_module("django_snapshots.import.artifacts.database")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.database")
     return mod.DatabaseArtifactImporter
 
 
@@ -63,7 +63,7 @@ def test_database_importer_restores_from_gz(tmp_path, django_user_model):
     """DatabaseArtifactImporter decompresses .sql.gz and restores the DB."""
     import asyncio
 
-    from django_snapshots.export.artifacts.database import DatabaseArtifactExporter
+    from django_snapshots.backup.artifacts.database import DatabaseArtifactExporter
 
     DatabaseArtifactImporter = _import_database_importer()
 
@@ -96,21 +96,21 @@ def test_database_importer_restores_from_gz(tmp_path, django_user_model):
 def test_media_importer_satisfies_async_artifact_importer_protocol():
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.media")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.media")
     MediaArtifactImporter = mod.MediaArtifactImporter
     from django_snapshots.artifacts.protocols import AsyncArtifactImporter
 
-    imp = MediaArtifactImporter(media_root="/tmp/media")
+    imp = MediaArtifactImporter(directory="/tmp/media")
     assert isinstance(imp, AsyncArtifactImporter)
 
 
 def test_media_importer_artifact_type():
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.media")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.media")
     MediaArtifactImporter = mod.MediaArtifactImporter
 
-    imp = MediaArtifactImporter(media_root="/tmp/media")
+    imp = MediaArtifactImporter(directory="/tmp/media")
     assert imp.artifact_type == "media"
     assert imp.filename == "media.tar.gz"
 
@@ -119,9 +119,9 @@ def test_media_importer_replace_mode_clears_existing_files(tmp_path):
     """Replace mode (default) removes stale files before extracting."""
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.media")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.media")
     MediaArtifactImporter = mod.MediaArtifactImporter
-    from django_snapshots.export.artifacts.media import MediaArtifactExporter
+    from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 
     # Source media dir with two files
     src_media = tmp_path / "src_media"
@@ -129,7 +129,7 @@ def test_media_importer_replace_mode_clears_existing_files(tmp_path):
     (src_media / "keep.txt").write_text("hello")
 
     # Create archive from src_media
-    exp = MediaArtifactExporter(media_root=str(src_media))
+    exp = MediaArtifactExporter(directory=str(src_media))
     archive = tmp_path / "media.tar.gz"
     exp._create_tar(archive)
 
@@ -139,7 +139,7 @@ def test_media_importer_replace_mode_clears_existing_files(tmp_path):
     (dst_media / "stale.txt").write_text("stale")
 
     # Replace restore
-    imp = MediaArtifactImporter(media_root=str(dst_media), merge=False)
+    imp = MediaArtifactImporter(directory=str(dst_media), merge=False)
     imp._extract_tar(archive)
 
     assert (dst_media / "keep.txt").exists()
@@ -150,15 +150,15 @@ def test_media_importer_merge_mode_preserves_existing_files(tmp_path):
     """Merge mode extracts on top; files not in archive survive."""
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.media")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.media")
     MediaArtifactImporter = mod.MediaArtifactImporter
-    from django_snapshots.export.artifacts.media import MediaArtifactExporter
+    from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 
     src_media = tmp_path / "src_media"
     src_media.mkdir()
     (src_media / "from_archive.txt").write_text("archive content")
 
-    exp = MediaArtifactExporter(media_root=str(src_media))
+    exp = MediaArtifactExporter(directory=str(src_media))
     archive = tmp_path / "media.tar.gz"
     exp._create_tar(archive)
 
@@ -167,7 +167,7 @@ def test_media_importer_merge_mode_preserves_existing_files(tmp_path):
     (dst_media / "existing.txt").write_text("existing content")
 
     # Merge restore
-    imp = MediaArtifactImporter(media_root=str(dst_media), merge=True)
+    imp = MediaArtifactImporter(directory=str(dst_media), merge=True)
     imp._extract_tar(archive)
 
     assert (dst_media / "from_archive.txt").exists()
@@ -178,18 +178,18 @@ def test_media_importer_empty_archive_does_not_error(tmp_path):
     """Extracting an archive of a non-existent media_root doesn't raise."""
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.media")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.media")
     MediaArtifactImporter = mod.MediaArtifactImporter
-    from django_snapshots.export.artifacts.media import MediaArtifactExporter
+    from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 
     src_media = tmp_path / "missing"  # doesn't exist
-    exp = MediaArtifactExporter(media_root=str(src_media))
+    exp = MediaArtifactExporter(directory=str(src_media))
     archive = tmp_path / "media.tar.gz"
     exp._create_tar(archive)  # creates empty archive
 
     dst_media = tmp_path / "dst_media"
     dst_media.mkdir()
-    imp = MediaArtifactImporter(media_root=str(dst_media), merge=False)
+    imp = MediaArtifactImporter(directory=str(dst_media), merge=False)
     imp._extract_tar(archive)  # should not raise
 
 
@@ -201,7 +201,7 @@ def test_media_importer_empty_archive_does_not_error(tmp_path):
 def test_environment_importer_satisfies_artifact_importer_protocol():
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.environment")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.environment")
     EnvironmentArtifactImporter = mod.EnvironmentArtifactImporter
     from django_snapshots.artifacts.protocols import ArtifactImporter
 
@@ -212,7 +212,7 @@ def test_environment_importer_satisfies_artifact_importer_protocol():
 def test_environment_importer_artifact_type():
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.environment")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.environment")
     EnvironmentArtifactImporter = mod.EnvironmentArtifactImporter
 
     imp = EnvironmentArtifactImporter()
@@ -224,7 +224,7 @@ def test_environment_importer_prints_diff(tmp_path, capsys):
     """restore() prints a unified diff to stdout and never raises."""
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.environment")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.environment")
     EnvironmentArtifactImporter = mod.EnvironmentArtifactImporter
 
     # Write a requirements.txt with a package that definitely isn't installed
@@ -243,7 +243,7 @@ def test_environment_importer_always_exits_zero(tmp_path):
     """restore() never raises even when there are diff discrepancies."""
     import importlib
 
-    mod = importlib.import_module("django_snapshots.import.artifacts.environment")
+    mod = importlib.import_module("django_snapshots.restore.artifacts.environment")
     EnvironmentArtifactImporter = mod.EnvironmentArtifactImporter
 
     req_file = tmp_path / "requirements.txt"

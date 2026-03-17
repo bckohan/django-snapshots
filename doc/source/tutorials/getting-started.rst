@@ -31,14 +31,14 @@ Add the three apps to ``INSTALLED_APPS`` in ``settings.py``:
 
     INSTALLED_APPS = [
         ...
-        "django_snapshots",        # core
-        "django_snapshots.export", # export subcommands
-        "django_snapshots.import", # import subcommands
+        "django_snapshots",         # core
+        "django_snapshots.backup",  # backup subcommands
+        "django_snapshots.restore", # restore subcommands
     ]
 
 .. tip::
 
-    On production servers you may want to omit ``django_snapshots.import``
+    On production servers you may want to omit ``django_snapshots.restore``
     from ``INSTALLED_APPS`` to prevent accidental data overwrites through
     the management command.
 
@@ -73,7 +73,7 @@ Check that the ``snapshots`` management command is available:
 
     python manage.py snapshots --help
 
-You should see a list of subcommands including ``export``, ``import``, ``list``,
+You should see a list of subcommands including ``backup``, ``restore``, ``list``,
 ``info``, ``delete``, ``prune``, and ``check``.
 
 Next steps

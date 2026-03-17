@@ -24,8 +24,6 @@ __author__ = "Brian Kohan"
 __license__ = "MIT"
 __copyright__ = "Copyright 2026 Brian Kohan"
 
-import importlib as _importlib
-
 from django_snapshots.artifacts import (
     AnyArtifactExporter,
     AnyArtifactImporter,
@@ -35,6 +33,8 @@ from django_snapshots.artifacts import (
     ArtifactImporterBase,
     AsyncArtifactExporter,
     AsyncArtifactImporter,
+    DirectoryArtifactExporter,
+    DirectoryArtifactImporter,
 )
 from django_snapshots.connectors import (
     DatabaseConnector,
@@ -54,6 +54,11 @@ from django_snapshots.exceptions import (
     SnapshotVersionError,
 )
 from django_snapshots.manifest import ArtifactRecord, Snapshot
+from django_snapshots.restore.artifacts import (
+    DatabaseArtifactImporter,
+    EnvironmentArtifactImporter,
+    MediaArtifactImporter,
+)
 from django_snapshots.settings import PruneConfig, SnapshotSettings
 from django_snapshots.storage import (
     AdvancedSnapshotStorage,
@@ -61,12 +66,6 @@ from django_snapshots.storage import (
     LocalFileSystemBackend,
     SnapshotStorage,
 )
-
-_import_artifacts = _importlib.import_module("django_snapshots.import.artifacts")
-DatabaseArtifactImporter = _import_artifacts.DatabaseArtifactImporter
-EnvironmentArtifactImporter = _import_artifacts.EnvironmentArtifactImporter
-MediaArtifactImporter = _import_artifacts.MediaArtifactImporter
-del _import_artifacts, _importlib
 
 __all__ = [
     # Metadata
@@ -110,6 +109,9 @@ __all__ = [
     "ArtifactImporter",
     "AsyncArtifactImporter",
     "AnyArtifactImporter",
+    # Directory Artifact Base Classes
+    "DirectoryArtifactExporter",
+    "DirectoryArtifactImporter",
     # Artifact Importers
     "DatabaseArtifactImporter",
     "EnvironmentArtifactImporter",
