@@ -9,7 +9,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import Annotated, List, Optional, cast
+from typing import TYPE_CHECKING, Annotated, Any, Awaitable, List, Optional, cast
 
 import typer
 from asyncer import syncify
@@ -24,14 +24,23 @@ from django_snapshots.exceptions import (
 )
 from django_snapshots.management.commands.snapshots import Command as SnapshotsCommand
 from django_snapshots.manifest import Snapshot
-from django_snapshots.settings import SnapshotSettings
 
 from ...artifacts.database import DatabaseArtifactImporter
 from ...artifacts.environment import EnvironmentArtifactImporter
 from ...artifacts.media import MediaArtifactImporter
 
+if TYPE_CHECKING:
+    from django_snapshots.storage.protocols import SnapshotStorage
+
+    class _RestoreCommand(SnapshotsCommand):
+        _restore_storage: SnapshotStorage
+        _restore_temp_dir: Path
+        _restore_snapshot: Snapshot
+        _restore_name: str
+
 
 def _sha256(path: Path) -> str:
+    """Return the hex SHA-256 digest of the file at *path*."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
@@ -78,6 +87,11 @@ def _create_database_importers(
     return [DatabaseArtifactImporter(db_alias=alias) for alias in sorted(aliases)]
 
 
+# ---------------------------------------------------------------------------
+# Restore group — invoked before any subcommand, handles the no-subcommand case
+# ---------------------------------------------------------------------------
+
+
 @SnapshotsCommand.group(
     name="restore",
     invoke_without_command=True,
@@ -85,7 +99,7 @@ def _create_database_importers(
     help=str(_("Restore a snapshot")),
 )
 def restore(
-    self,
+    self: _RestoreCommand,
     ctx: typer.Context,
     name: Annotated[
         Optional[str],
@@ -93,9 +107,7 @@ def restore(
     ] = None,
 ) -> None:
     """Initialise restore state and load manifest (runs before any subcommand)."""
-    snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-    self._restore_storage = snap_settings.storage
-    self._importers = []
+    self._restore_storage = self.settings.storage
     self._restore_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_restore_"))
     try:
         resolved_name = name or _resolve_latest(self._restore_storage)
@@ -111,14 +123,21 @@ def restore(
         shutil.rmtree(self._restore_temp_dir, ignore_errors=True)
         raise
 
+    # here we use the context to determine if a subcommand was invoked and
+    # if it was not we run all the restore routines
+    if not ctx.invoked_subcommand:
+        for cmd in [cmd for _, cmd in self.get_subcommand("restore").children.items()]:
+            cmd()
+
+
+# ---------------------------------------------------------------------------
+# Artifact subcommands — --name is specified on the restore group, not here.
+# ---------------------------------------------------------------------------
+
 
 @restore.command(help=str(_("Restore database(s) from compressed SQL dumps")))
 def database(
-    self,
-    name: Annotated[
-        Optional[str],
-        typer.Option(help=str(_("Snapshot name (default: latest)"))),
-    ] = None,
+    self: _RestoreCommand,
     databases: Annotated[
         Optional[List[str]],
         typer.Option(
@@ -126,31 +145,17 @@ def database(
             help=str(_("DB aliases to restore (default: all in snapshot)")),
         ),
     ] = None,
-) -> None:
-    if name is not None:
-        # User wants a different snapshot — re-resolve
-        if not self._restore_storage.exists(f"{name}/manifest.json"):
-            raise SnapshotNotFoundError(
-                f"Snapshot {name!r} not found in storage "
-                f"(missing '{name}/manifest.json')."
-            )
-        self._restore_name = name
-        with self._restore_storage.read(f"{name}/manifest.json") as f:
-            self._restore_snapshot = Snapshot.from_dict(json.load(f))
+) -> list[DatabaseArtifactImporter]:
     importers = _create_database_importers(self._restore_snapshot, databases=databases)
-    self._importers.extend(importers)
     if sys.stdin.isatty():
         aliases = [i.db_alias for i in importers]
-        typer.echo(f"  Databases : {', '.join(aliases)}")
+        self.echo(f"  Databases : {', '.join(aliases)}")
+    return importers
 
 
 @restore.command(help=str(_("Restore MEDIA_ROOT from compressed tarball")))
 def media(
-    self,
-    name: Annotated[
-        Optional[str],
-        typer.Option(help=str(_("Snapshot name (default: latest)"))),
-    ] = None,
+    self: _RestoreCommand,
     media_root: Annotated[
         Optional[str],
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT restore path"))),
@@ -162,40 +167,41 @@ def media(
             help=str(_("Merge into existing MEDIA_ROOT instead of replacing")),
         ),
     ] = False,
-) -> None:
-    if name is not None:
-        self._restore_name = name
-    self._importers.append(
-        MediaArtifactImporter(directory=media_root or "", merge=merge)
-    )
+) -> MediaArtifactImporter:
+    imp = MediaArtifactImporter(directory=media_root or "", merge=merge)
     if sys.stdin.isatty():
-        imp = self._importers[-1]
-        typer.echo(f"  Directory : {imp.directory}")
+        self.echo(f"  Directory : {imp.directory}")
+    return imp
 
 
 @restore.command(help=str(_("Show diff between snapshot environment and current")))
 def environment(
-    self,
-    name: Annotated[
-        Optional[str],
-        typer.Option(help=str(_("Snapshot name (default: latest)"))),
-    ] = None,
+    self: _RestoreCommand,
     check_only: Annotated[
         bool,
         typer.Option(
             "--check-only", help=str(_("Print diff and exit; skip all other restores"))
         ),
     ] = False,
-) -> None:
-    if name is not None:
-        self._restore_name = name
-    self._importers.append(EnvironmentArtifactImporter(check_only=check_only))
-    if sys.stdin.isatty():
-        typer.echo("  Environment: will check pip diff")
+) -> EnvironmentArtifactImporter:
+    return EnvironmentArtifactImporter(check_only=check_only)
+
+
+# ---------------------------------------------------------------------------
+# @finalize — runs after all chained subcommands complete
+# ---------------------------------------------------------------------------
 
 
 @restore.finalize()
-def restore_finalize(self, results: list) -> None:  # noqa: ARG001
+def restore_finalize(
+    self: _RestoreCommand,
+    results: list[
+        list[DatabaseArtifactImporter]
+        | MediaArtifactImporter
+        | EnvironmentArtifactImporter
+    ],
+) -> None:
+    """Download artifacts, verify checksums, and restore."""
     try:
         storage = self._restore_storage
         name = self._restore_name
@@ -208,15 +214,16 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
 
         artifact_map = {a.filename: a for a in snapshot.artifacts}
 
-        # Step 3: Handle no-subcommand default — invoke all registered children
-        if not self._importers:
-            restore_group = self.get_subcommand("restore")
-            for _child_name, child_cmd in restore_group.children.items():
-                child_cmd()
+        # flatten the list of importers (supporting nested lists)
+        importers: list[Any] = [
+            y
+            for x in results
+            for y in (x if isinstance(x, list) else cast(list[Any], [x]))
+        ]
 
-        importers: list = list(self._importers)
-
-        # Handle --check-only
+        # ------------------------------------------------------------------ #
+        # 1. Handle --check-only (environment diff without restoring)         #
+        # ------------------------------------------------------------------ #
         check_only_imp = next(
             (
                 i
@@ -236,7 +243,9 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
                 check_only_imp.restore(env_dest)
             raise SystemExit(0)
 
-        # Step 4: Confirmation prompt (TTY only)
+        # ------------------------------------------------------------------ #
+        # 2. Confirmation prompt (TTY only)                                   #
+        # ------------------------------------------------------------------ #
         if sys.stdin.isatty():
             answer = input(f"Restore snapshot {name!r}? Continue? [y/N] ")
             if answer.strip().lower() != "y":
@@ -250,12 +259,14 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
             if filename in artifact_map:
                 pairs.append((imp, filename))
             else:
-                typer.echo(
+                self.echo(
                     f"Warning: artifact {filename!r} not found in snapshot {name!r}; skipping.",
                     err=True,
                 )
 
-        # Step 5: Download artifacts concurrently
+        # ------------------------------------------------------------------ #
+        # 3. Download all artifacts concurrently                              #
+        # ------------------------------------------------------------------ #
         def _download_one(filename: str, dest: Path) -> None:
             with storage.read(f"{name}/{filename}") as f:
                 dest.write_bytes(f.read())
@@ -272,7 +283,9 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
 
         syncify(_gather_downloads, raise_sync_error=False)()
 
-        # Step 6: Verify checksums (all-or-nothing)
+        # ------------------------------------------------------------------ #
+        # 4. Verify checksums (all-or-nothing before any restore runs)        #
+        # ------------------------------------------------------------------ #
         for _, filename in pairs:
             dest = self._restore_temp_dir / filename
             expected = artifact_map[filename].checksum
@@ -283,10 +296,12 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
                     f"expected {expected}, got {actual}"
                 )
 
-        # Step 7: Restore concurrently
+        # ------------------------------------------------------------------ #
+        # 5. Restore all artifacts concurrently                               #
+        # ------------------------------------------------------------------ #
         async def _gather_restores() -> None:
             loop = asyncio.get_running_loop()
-            tasks = []
+            tasks: list[Awaitable[Any]] = []
             for imp, filename in pairs:
                 src = self._restore_temp_dir / filename
                 if asyncio.iscoroutinefunction(imp.restore):
@@ -297,7 +312,7 @@ def restore_finalize(self, results: list) -> None:  # noqa: ARG001
 
         syncify(_gather_restores, raise_sync_error=False)()
 
-        typer.echo(f"Snapshot restored: {name}")
+        self.echo(f"Snapshot restored: {name}")
 
     finally:
         shutil.rmtree(

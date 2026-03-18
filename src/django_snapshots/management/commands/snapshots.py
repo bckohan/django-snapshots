@@ -1,13 +1,13 @@
 """Root ``snapshots`` management command.
 
-The export and import apps attach their own command groups here via
+The backup and restore apps attach their own command groups here via
 django-typer's plugin system (see their AppConfig.ready() methods).
 """
 
 from __future__ import annotations
 
 import json
-from typing import Annotated, Literal, Optional, cast
+from typing import Annotated, Literal, Optional
 
 import typer
 from django.conf import settings as django_settings
@@ -16,19 +16,23 @@ from django_typer.management import TyperCommand, command
 
 from django_snapshots._pip import _pip_freeze
 from django_snapshots.exceptions import SnapshotNotFoundError
-from django_snapshots.management.utils import (
+from django_snapshots.manifest import Snapshot
+from django_snapshots.settings import SnapshotSettings
+from django_snapshots.utils import (
     _check_pip_diff,
     _format_size,
     _snapshots_to_prune,
     delete_snapshot,
     list_snapshots,
 )
-from django_snapshots.manifest import Snapshot
-from django_snapshots.settings import SnapshotSettings
 
 
 class Command(TyperCommand):
     help = _("Manage snapshots")
+
+    settings: SnapshotSettings = SnapshotSettings.coerce(
+        getattr(django_settings, "SNAPSHOTS", {})
+    )
 
     @command(help=str(_("List snapshots in storage")))
     def list(
@@ -42,12 +46,10 @@ class Command(TyperCommand):
             ),
         ] = "table",
     ) -> None:
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        storage = snap_settings.storage
-        snapshots = list_snapshots(storage)
+        snapshots = list_snapshots(self.settings.storage)
 
         if fmt == "json":
-            typer.echo(
+            self.echo(
                 json.dumps([s.to_dict() for s in snapshots], indent=2, default=str)
             )
             return
@@ -56,12 +58,12 @@ class Command(TyperCommand):
             try:
                 import yaml  # type: ignore[import-untyped]
             except ImportError:
-                typer.echo(
+                self.echo(
                     "PyYAML is required for --format yaml: pip install PyYAML",
                     err=True,
                 )
                 raise SystemExit(1)
-            typer.echo(
+            self.echo(
                 yaml.safe_dump(
                     [s.to_dict() for s in snapshots], default_flow_style=False
                 )
@@ -70,7 +72,7 @@ class Command(TyperCommand):
 
         # table (default)
         if not snapshots:
-            typer.echo("No snapshots found.")
+            self.echo("No snapshots found.")
             return
 
         col = [40, 22, 9, 10]
@@ -78,11 +80,11 @@ class Command(TyperCommand):
             f"{'NAME':<{col[0]}}  {'CREATED':<{col[1]}}  "
             f"{'ARTIFACTS':>{col[2]}}  {'SIZE':>{col[3]}}  ENCRYPTED"
         )
-        typer.echo(header)
-        typer.echo("-" * len(header))
+        self.echo(header)
+        self.echo("-" * len(header))
         for s in snapshots:
             total = sum(a.size for a in s.artifacts)
-            typer.echo(
+            self.echo(
                 f"{s.name:<{col[0]}}  "
                 f"{s.created_at.strftime('%Y-%m-%d %H:%M:%S'):<{col[1]}}  "
                 f"{len(s.artifacts):>{col[2]}}  "
@@ -105,13 +107,12 @@ class Command(TyperCommand):
             typer.Option("--force", "-f", help=str(_("Skip confirmation prompt"))),
         ] = False,
     ) -> None:
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        storage = snap_settings.storage
+        storage = self.settings.storage
 
         if all_:
             snapshots = list_snapshots(storage)
             if not snapshots:
-                typer.echo("No snapshots found.")
+                self.echo("No snapshots found.")
                 return
             if not force:
                 answer = input(f"Delete ALL {len(snapshots)} snapshot(s)? [y/N] ")
@@ -119,11 +120,11 @@ class Command(TyperCommand):
                     raise SystemExit(0)
             for s in snapshots:
                 delete_snapshot(storage, s.name)
-            typer.echo(f"Deleted {len(snapshots)} snapshot(s).")
+            self.echo(f"Deleted {len(snapshots)} snapshot(s).")
             return
 
         if name is None:
-            typer.echo("Error: provide a snapshot name or use --all.", err=True)
+            self.echo("Error: provide a snapshot name or use --all.", err=True)
             raise SystemExit(1)
 
         if not storage.exists(f"{name}/manifest.json"):
@@ -135,7 +136,7 @@ class Command(TyperCommand):
                 raise SystemExit(0)
 
         delete_snapshot(storage, name)
-        typer.echo(f"Deleted snapshot {name!r}.")
+        self.echo(f"Deleted snapshot {name!r}.")
 
     @command(help=str(_("Show full details for a snapshot")))
     def info(
@@ -150,12 +151,10 @@ class Command(TyperCommand):
             ),
         ] = "table",
     ) -> None:
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        storage = snap_settings.storage
-        snapshot = Snapshot.from_storage(storage, name)
+        snapshot = Snapshot.from_storage(self.settings.storage, name)
 
         if fmt == "json":
-            typer.echo(json.dumps(snapshot.to_dict(), indent=2, default=str))
+            self.echo(json.dumps(snapshot.to_dict(), indent=2, default=str))
             return
 
         # table (default)
@@ -167,19 +166,19 @@ class Command(TyperCommand):
             ("Hostname", snapshot.hostname),
             ("Encrypted", "yes" if snapshot.encrypted else "no"),
         ]:
-            typer.echo(f"{label:<12} {value}")
+            self.echo(f"{label:<12} {value}")
 
-        typer.echo()
-        typer.echo("Artifacts:")
+        self.echo()
+        self.echo("Artifacts:")
         col = [12, 22, 10, 18]
-        typer.echo(
+        self.echo(
             f"  {'TYPE':<{col[0]}}  {'FILENAME':<{col[1]}}  "
             f"{'SIZE':>{col[2]}}  CHECKSUM"
         )
-        typer.echo("  " + "-" * (sum(col) + 8))
+        self.echo("  " + "-" * (sum(col) + 8))
         for art in snapshot.artifacts:
             chk = art.checksum[:20] + "..." if len(art.checksum) > 20 else art.checksum
-            typer.echo(
+            self.echo(
                 f"  {art.type:<{col[0]}}  {art.filename:<{col[1]}}  "
                 f"{_format_size(art.size):>{col[2]}}  {chk}"
             )
@@ -212,11 +211,10 @@ class Command(TyperCommand):
             typer.Option("--force", "-f", help=str(_("Skip confirmation prompt"))),
         ] = False,
     ) -> None:
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        storage = snap_settings.storage
+        storage = self.settings.storage
 
         # Fall back to SNAPSHOTS.prune defaults for any unset CLI flag
-        prune_cfg = snap_settings.prune
+        prune_cfg = self.settings.prune
         if keep is None and prune_cfg:
             keep = prune_cfg.keep
         if keep_daily is None and prune_cfg:
@@ -225,19 +223,19 @@ class Command(TyperCommand):
             keep_weekly = prune_cfg.keep_weekly
 
         if keep is None and keep_daily is None and keep_weekly is None:
-            typer.echo("No prune policy configured.")
+            self.echo("No prune policy configured.")
             return
 
         snapshots = list_snapshots(storage)
         to_delete = _snapshots_to_prune(snapshots, keep, keep_daily, keep_weekly)
 
         if not to_delete:
-            typer.echo("Nothing to prune.")
+            self.echo("Nothing to prune.")
             return
 
-        typer.echo(f"Will delete {len(to_delete)} snapshot(s):")
+        self.echo(f"Will delete {len(to_delete)} snapshot(s):")
         for s in to_delete:
-            typer.echo(f"  {s.name}")
+            self.echo(f"  {s.name}")
 
         if not force:
             answer = input("Proceed? [y/N] ")
@@ -246,7 +244,7 @@ class Command(TyperCommand):
 
         for s in to_delete:
             delete_snapshot(storage, s.name)
-        typer.echo(f"Pruned {len(to_delete)} snapshot(s).")
+        self.echo(f"Pruned {len(to_delete)} snapshot(s).")
 
     @command(
         name="check", help=str(_("Compare snapshot Python environment against current"))
@@ -265,8 +263,7 @@ class Command(TyperCommand):
             ),
         ] = False,
     ) -> None:
-        snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-        storage = snap_settings.storage
+        storage = self.settings.storage
 
         if name is None:
             snapshots = list_snapshots(storage)
@@ -280,23 +277,23 @@ class Command(TyperCommand):
         missing, extra, mismatches = _check_pip_diff(snapshot.pip, current_pip)
 
         if not missing and not extra and not mismatches:
-            typer.echo(f"Environment matches snapshot {snapshot.name!r}.")
+            self.echo(f"Environment matches snapshot {snapshot.name!r}.")
             return
 
-        typer.echo(f"Environment diff for snapshot {snapshot.name!r}:")
+        self.echo(f"Environment diff for snapshot {snapshot.name!r}:")
         if missing:
-            typer.echo(f"\nMissing from current environment ({len(missing)}):")
+            self.echo(f"\nMissing from current environment ({len(missing)}):")
             for pkg in missing:
-                typer.echo(f"  - {pkg}")
+                self.echo(f"  - {pkg}")
         if extra:
-            typer.echo(f"\nExtra in current environment ({len(extra)}):")
+            self.echo(f"\nExtra in current environment ({len(extra)}):")
             for pkg in extra:
-                typer.echo(f"  + {pkg}")
+                self.echo(f"  + {pkg}")
         if mismatches:
-            typer.echo(f"\nVersion mismatches ({len(mismatches)}):")
+            self.echo(f"\nVersion mismatches ({len(mismatches)}):")
             for snap_pkg, curr_pkg in mismatches:
-                typer.echo(f"  snapshot: {snap_pkg}")
-                typer.echo(f"  current:  {curr_pkg}")
+                self.echo(f"  snapshot: {snap_pkg}")
+                self.echo(f"  current:  {curr_pkg}")
 
         if strict and (missing or extra or mismatches):
             raise SystemExit(1)

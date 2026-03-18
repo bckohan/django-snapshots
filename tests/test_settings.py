@@ -47,9 +47,9 @@ def test_snapshot_settings_from_dict():
     from django_snapshots.settings import SnapshotSettings
 
     data = {
-        "SNAPSHOT_FORMAT": "archive",
-        "METADATA": {"env": "production"},
-        "PRUNE": {"keep": 5, "keep_daily": 3, "keep_weekly": 2},
+        "snapshot_format": "archive",
+        "metadata": {"env": "production"},
+        "prune": {"keep": 5, "keep_daily": 3, "keep_weekly": 2},
     }
     s = SnapshotSettings.from_dict(data)
     assert s.snapshot_format == "archive"

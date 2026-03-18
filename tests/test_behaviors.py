@@ -248,9 +248,9 @@ def test_settings_dict_with_prune_normalised_correctly():
     """from_dict with a PRUNE dict produces a PruneConfig with the correct values."""
     s = SnapshotSettings.from_dict(
         {
-            "SNAPSHOT_FORMAT": "directory",
-            "PRUNE": {"keep": 30, "keep_daily": 14, "keep_weekly": 8},
-            "METADATA": {"project": "my-app"},
+            "snapshot_format": "directory",
+            "prune": {"keep": 30, "keep_daily": 14, "keep_weekly": 8},
+            "metadata": {"project": "my-app"},
         }
     )
     assert s.snapshot_format == "directory"

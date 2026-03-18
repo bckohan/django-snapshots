@@ -3,7 +3,7 @@
 Both dict and dataclass styles are accepted in Django settings::
 
     # Dict style
-    SNAPSHOTS = {"SNAPSHOT_FORMAT": "directory", ...}
+    SNAPSHOTS = {"snapshot_format": "directory", ...}
 
     # Typed style (IDE completion + validation)
     from django_snapshots.settings import SnapshotSettings
@@ -16,11 +16,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
+
+from django.core.exceptions import ImproperlyConfigured
+from typing_extensions import Self
+
+
+class ConfigBase(Protocol):
+    """Protocol for dataclasses that can be constructed from a plain dict.
+
+    Inherit from this to get the ``coerce`` classmethod for free; implement
+    ``from_dict`` to satisfy the protocol.
+    """
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self: ...
+
+    @classmethod
+    def coerce(cls, data: Self | dict[str, Any]) -> Self:
+        """Return *data* unchanged if it is already an instance, else call ``from_dict``."""
+        if isinstance(data, dict):
+            return cls.from_dict(data)
+        return data
 
 
 @dataclass
-class PruneConfig:
+class PruneConfig(ConfigBase):
     """Retention policy for the prune command.
 
     Policies use union semantics: a snapshot is kept if *any* policy retains it.
@@ -35,13 +56,22 @@ class PruneConfig:
     keep_weekly: int | None = None
     """Keep the most recent snapshot from each of the last N ISO weeks."""
 
+    def __post_init__(self) -> None:
+        for field_name in ("keep", "keep_daily", "keep_weekly"):
+            value = getattr(self, field_name)
+            if value is not None and value < 1:
+                raise ImproperlyConfigured(
+                    f"SNAPSHOTS['prune']['{field_name}'] must be a positive integer, got {value!r}."
+                )
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PruneConfig:
-        return cls(
-            keep=data.get("keep"),
-            keep_daily=data.get("keep_daily"),
-            keep_weekly=data.get("keep_weekly"),
-        )
+        try:
+            return cls(**data)
+        except TypeError as e:
+            raise ImproperlyConfigured(
+                f"Invalid SNAPSHOTS['prune'] configuration: {e}"
+            ) from e
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -52,7 +82,7 @@ class PruneConfig:
 
 
 @dataclass
-class SnapshotSettings:
+class SnapshotSettings(ConfigBase):
     """Top-level django-snapshots configuration.
 
     Set as the SNAPSHOTS Django setting. Accepts either a plain dict or a
@@ -81,41 +111,36 @@ class SnapshotSettings:
     prune: PruneConfig | None = None
     """Default retention policy used by ``snapshots prune`` when no flags are given."""
 
+    _VALID_FORMATS = frozenset({"directory", "archive"})
+
+    def __post_init__(self) -> None:
+        if self.snapshot_format not in self._VALID_FORMATS:
+            raise ImproperlyConfigured(
+                f"SNAPSHOTS['snapshot_format'] must be one of {sorted(self._VALID_FORMATS)}, "
+                f"got {self.snapshot_format!r}."
+            )
+        if not self.snapshot_name:
+            raise ImproperlyConfigured(
+                "SNAPSHOTS['snapshot_name'] must be a non-empty string or callable."
+            )
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SnapshotSettings:
-        _known_keys = {
-            "STORAGE",
-            "SNAPSHOT_FORMAT",
-            "SNAPSHOT_NAME",
-            "METADATA",
-            "ENCRYPTION",
-            "DATABASE_CONNECTORS",
-            "PRUNE",
-        }
-        unknown = set(data.keys()) - _known_keys
-        if unknown:
-            raise ValueError(
-                f"Unknown SNAPSHOTS setting key(s): {sorted(unknown)}. "
-                f"Known keys: {sorted(_known_keys)}"
-            )
-        prune_data = data.get("PRUNE")
-        return cls(
-            storage=data.get("STORAGE"),
-            snapshot_format=data.get("SNAPSHOT_FORMAT", "directory"),
-            snapshot_name=data.get("SNAPSHOT_NAME", "{timestamp_utc}"),
-            metadata=data.get("METADATA", {}),
-            encryption=data.get("ENCRYPTION"),
-            database_connectors=data.get("DATABASE_CONNECTORS", {}),
-            prune=PruneConfig.from_dict(prune_data) if prune_data else None,
-        )
+        try:
+            kwargs = dict(data)
+            if "prune" in kwargs:
+                kwargs["prune"] = PruneConfig.coerce(kwargs["prune"])
+            return cls(**kwargs)
+        except (TypeError, ImproperlyConfigured) as e:
+            raise ImproperlyConfigured(f"Invalid SNAPSHOTS configuration: {e}") from e
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "STORAGE": self.storage,
-            "SNAPSHOT_FORMAT": self.snapshot_format,
-            "SNAPSHOT_NAME": self.snapshot_name,
-            "METADATA": self.metadata,
-            "ENCRYPTION": self.encryption,
-            "DATABASE_CONNECTORS": self.database_connectors,
-            "PRUNE": self.prune.to_dict() if self.prune else None,
+            "storage": self.storage,
+            "snapshot_format": self.snapshot_format,
+            "snapshot_name": self.snapshot_name,
+            "metadata": self.metadata,
+            "encryption": self.encryption,
+            "database_connectors": self.database_connectors,
+            "prune": self.prune.to_dict() if self.prune else None,
         }

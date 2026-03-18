@@ -30,32 +30,32 @@ def _backup_snap(snap_settings, name):
 
 
 def test_format_size_bytes():
-    from django_snapshots.management.utils import _format_size
+    from django_snapshots.utils import _format_size
 
     assert _format_size(512) == "512.0 B"
 
 
 def test_format_size_kilobytes():
-    from django_snapshots.management.utils import _format_size
+    from django_snapshots.utils import _format_size
 
     assert _format_size(2048) == "2.0 KB"
 
 
 def test_format_size_megabytes():
-    from django_snapshots.management.utils import _format_size
+    from django_snapshots.utils import _format_size
 
     assert "MB" in _format_size(2 * 1024 * 1024)
 
 
 def test_format_size_gigabytes():
-    from django_snapshots.management.utils import _format_size
+    from django_snapshots.utils import _format_size
 
     assert "GB" in _format_size(2 * 1024**3)
 
 
 def test_snapshots_to_prune_keep(tmp_path):
     """keep=1 retains only the newest, marks rest for deletion."""
-    from django_snapshots.management.utils import _snapshots_to_prune
+    from django_snapshots.utils import _snapshots_to_prune
     from django_snapshots.manifest import ArtifactRecord, Snapshot
     from datetime import datetime, timezone
 
@@ -81,7 +81,7 @@ def test_snapshots_to_prune_keep(tmp_path):
 
 def test_snapshots_to_prune_keep_daily(tmp_path):
     """keep_daily=1 retains most recent from 1 day, deletes same-day older ones."""
-    from django_snapshots.management.utils import _snapshots_to_prune
+    from django_snapshots.utils import _snapshots_to_prune
     from django_snapshots.manifest import Snapshot
     from datetime import datetime, timezone
 
@@ -107,7 +107,7 @@ def test_snapshots_to_prune_keep_daily(tmp_path):
 
 def test_snapshots_to_prune_union_semantics():
     """A snapshot retained by any policy survives."""
-    from django_snapshots.management.utils import _snapshots_to_prune
+    from django_snapshots.utils import _snapshots_to_prune
     from django_snapshots.manifest import Snapshot
     from datetime import datetime, timezone
 
@@ -135,7 +135,7 @@ def test_snapshots_to_prune_union_semantics():
 
 def test_snapshots_to_prune_keep_weekly():
     """keep_weekly=2 retains the most recent from each of 2 ISO weeks."""
-    from django_snapshots.management.utils import _snapshots_to_prune
+    from django_snapshots.utils import _snapshots_to_prune
     from django_snapshots.manifest import Snapshot
     from datetime import datetime, timezone
 
@@ -171,7 +171,7 @@ def test_snapshots_to_prune_keep_weekly():
 
 
 def test_check_pip_diff_missing_extra_mismatch():
-    from django_snapshots.management.utils import _check_pip_diff
+    from django_snapshots.utils import _check_pip_diff
 
     snapshot_pip = ["Django==4.2.0", "requests==2.28.0", "old-pkg==1.0.0"]
     current_pip = ["Django==5.2.0", "requests==2.28.0", "new-pkg==3.0.0"]
@@ -184,7 +184,7 @@ def test_check_pip_diff_missing_extra_mismatch():
 
 
 def test_check_pip_diff_identical():
-    from django_snapshots.management.utils import _check_pip_diff
+    from django_snapshots.utils import _check_pip_diff
 
     pip = ["Django==5.2.0", "requests==2.28.0"]
     missing, extra, mismatches = _check_pip_diff(pip, pip)
@@ -195,7 +195,7 @@ def test_check_pip_diff_identical():
 
 def test_list_snapshots_skips_corrupt_manifest(tmp_path):
     """list_snapshots silently skips entries with corrupt manifests."""
-    from django_snapshots.management.utils import list_snapshots
+    from django_snapshots.utils import list_snapshots
     from django_snapshots.storage.local import LocalFileSystemBackend
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))

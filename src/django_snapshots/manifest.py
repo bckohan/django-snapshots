@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from django_snapshots.exceptions import SnapshotNotFoundError, SnapshotVersionError
+from django_snapshots.settings import ConfigBase
 
 if TYPE_CHECKING:
     from django_snapshots.storage.protocols import SnapshotStorage
@@ -25,7 +26,7 @@ SUPPORTED_VERSIONS = {"1"}
 
 
 @dataclass
-class ArtifactRecord:
+class ArtifactRecord(ConfigBase):
     """Immutable record of a generated artifact as stored in the manifest."""
 
     type: str
@@ -59,7 +60,7 @@ class ArtifactRecord:
 
 
 @dataclass
-class Snapshot:
+class Snapshot(ConfigBase):
     """In-memory representation of a snapshot manifest."""
 
     version: str

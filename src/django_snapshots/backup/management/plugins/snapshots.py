@@ -12,7 +12,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Any, Awaitable, Optional, cast
+from typing import TYPE_CHECKING, Annotated, Any, Awaitable, Optional
 
 import django
 import typer
@@ -31,7 +31,16 @@ from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 from django_snapshots.exceptions import SnapshotExistsError
 from django_snapshots.management.commands.snapshots import Command as SnapshotsCommand
 from django_snapshots.manifest import ArtifactRecord, Snapshot
-from django_snapshots.settings import SnapshotSettings
+
+if TYPE_CHECKING:
+    from django_snapshots.storage.protocols import SnapshotStorage
+
+    class _BackupCommand(SnapshotsCommand):
+        _backup_storage: SnapshotStorage
+        _backup_overwrite: bool
+        _backup_created_at: datetime
+        _backup_name: str
+        _backup_temp_dir: Path
 
 
 def _sha256(path: Path) -> str:
@@ -55,7 +64,7 @@ def _sha256(path: Path) -> str:
     help=_("Backup a snapshot"),
 )
 def backup(
-    self,
+    self: _BackupCommand,
     ctx: typer.Context,
     name: Annotated[
         Optional[str],
@@ -69,8 +78,7 @@ def backup(
     ] = False,
 ) -> None:
     """Initialise backup state (runs before any subcommand)."""
-    snap_settings = cast(SnapshotSettings, django_settings.SNAPSHOTS)
-    self._backup_storage = snap_settings.storage
+    self._backup_storage = self.settings.storage
     self._backup_overwrite = overwrite
 
     now = datetime.now(timezone.utc)
@@ -93,7 +101,7 @@ def backup(
 
 @backup.command(help=_("Export database(s) as compressed SQL dumps"))
 def database(
-    self,
+    self: _BackupCommand,
     databases: Annotated[
         Optional[list[str]],
         typer.Option("--databases", help=str(_("DB aliases to export (default: all)"))),
@@ -120,7 +128,7 @@ def database(
 
 @backup.command(help=_("Export MEDIA_ROOT as a compressed tarball"))
 def media(
-    self,
+    self: _BackupCommand,
     media_root: Annotated[
         Optional[str],
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT path"))),
@@ -131,7 +139,7 @@ def media(
 
 @backup.command(help=_("Capture the current Python environment (pip freeze)"))
 def environment(
-    self,
+    self: _BackupCommand,
 ) -> EnvironmentArtifactExporter:
     return EnvironmentArtifactExporter()
 
@@ -143,7 +151,8 @@ def environment(
 
 @backup.finalize()
 def backup_finalize(
-    self, results: list[AnyArtifactExporter | list[AnyArtifactExporter]]
+    self: _BackupCommand,
+    results: list[AnyArtifactExporter | list[AnyArtifactExporter]],
 ) -> None:  # noqa: ARG001
     """Check for collision, generate artifacts, compute checksums, write manifest."""
     try:
@@ -206,7 +215,7 @@ def backup_finalize(
             hostname=socket.gethostname(),
             encrypted=False,
             pip=_pip_freeze(),
-            metadata=dict(getattr(django_settings.SNAPSHOTS, "metadata", {})),
+            metadata=dict(self.settings.metadata),
             artifacts=artifact_records,
         )
         manifest_dest = self._backup_temp_dir / "manifest.json"
@@ -224,13 +233,17 @@ def backup_finalize(
         # leaving it in a state that will pass the collision guard on retry.
         # Full atomic upload support requires a storage backend with transaction semantics.
         for file_path in sorted(self._backup_temp_dir.iterdir()):
+            if file_path.name == "manifest.json":
+                continue
             with open(file_path, "rb") as f:
                 self._backup_storage.write(f"{self._backup_name}/{file_path.name}", f)
 
-        typer.echo(f"Snapshot complete: {self._backup_name}")
+        # write manifest last so if it's there we know the backup is complete
+        with open(manifest_dest, "rb") as f:
+            self._backup_storage.write(f"{self._backup_name}/manifest.json", f)
+
+        self.echo(f"Snapshot complete: {self._backup_name}")
 
     finally:
-        shutil.rmtree(
-            getattr(self, "_backup_temp_dir", None) or Path("/nonexistent"),
-            ignore_errors=True,
-        )
+        if (tmp_dir := getattr(self, "_backup_temp_dir", None)) and tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
