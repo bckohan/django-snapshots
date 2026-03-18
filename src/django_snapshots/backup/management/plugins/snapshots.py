@@ -86,24 +86,14 @@ def backup(
 
 
 # ---------------------------------------------------------------------------
-# Artifact subcommands — each accepts --name and --overwrite so that
-# ``snapshots backup database --name foo`` works (option after subcommand).
+# Artifact subcommands — --name and --overwrite are specified on the backup
+# group, not on individual subcommands.
 # ---------------------------------------------------------------------------
 
 
 @backup.command(help=_("Export database(s) as compressed SQL dumps"))
 def database(
     self,
-    name: Annotated[
-        Optional[str],
-        typer.Option(help=str(_("Snapshot name (default: UTC timestamp)"))),
-    ] = None,
-    overwrite: Annotated[
-        bool,
-        typer.Option(
-            "--overwrite", help=str(_("Overwrite if snapshot already exists"))
-        ),
-    ] = False,
     databases: Annotated[
         Optional[list[str]],
         typer.Option("--databases", help=str(_("DB aliases to export (default: all)"))),
@@ -116,10 +106,6 @@ def database(
         ),
     ] = None,
 ) -> list[DatabaseArtifactExporter]:
-    if name is not None:
-        self._backup_name = name
-    if overwrite:
-        self._backup_overwrite = overwrite
     aliases = databases or list(django_settings.DATABASES.keys())
     exporters = []
     for alias in aliases:
@@ -135,46 +121,18 @@ def database(
 @backup.command(help=_("Export MEDIA_ROOT as a compressed tarball"))
 def media(
     self,
-    name: Annotated[
-        Optional[str],
-        typer.Option(help=str(_("Snapshot name (default: UTC timestamp)"))),
-    ] = None,
-    overwrite: Annotated[
-        bool,
-        typer.Option(
-            "--overwrite", help=str(_("Overwrite if snapshot already exists"))
-        ),
-    ] = False,
     media_root: Annotated[
         Optional[str],
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT path"))),
     ] = None,
 ) -> MediaArtifactExporter:
-    if name is not None:
-        self._backup_name = name
-    if overwrite:
-        self._backup_overwrite = overwrite
     return MediaArtifactExporter(directory=media_root or "")
 
 
 @backup.command(help=_("Capture the current Python environment (pip freeze)"))
 def environment(
     self,
-    name: Annotated[
-        Optional[str],
-        typer.Option(help=str(_("Snapshot name (default: UTC timestamp)"))),
-    ] = None,
-    overwrite: Annotated[
-        bool,
-        typer.Option(
-            "--overwrite", help=str(_("Overwrite if snapshot already exists"))
-        ),
-    ] = False,
 ) -> EnvironmentArtifactExporter:
-    if name is not None:
-        self._backup_name = name
-    if overwrite:
-        self._backup_overwrite = overwrite
     return EnvironmentArtifactExporter()
 
 
@@ -194,7 +152,7 @@ def backup_finalize(
             y for x in results for y in (x if isinstance(x, (list, tuple)) else [x])
         ]
 
-        # Check for name collision (deferred to finalize so --name on subcommand works)
+        # Check for name collision
         manifest_path = f"{self._backup_name}/manifest.json"
         if not self._backup_overwrite and self._backup_storage.exists(manifest_path):
             raise SnapshotExistsError(
