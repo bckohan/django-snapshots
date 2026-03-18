@@ -132,7 +132,7 @@ dev = [
     "packaging>=24.2",
     "tomlkit>=0.13.3",
     "ipdb>=0.13.13",
-    "ipython>=8.18.1",
+    "ipython>=8.18.1"
 ]
 
 [tool.mypy]

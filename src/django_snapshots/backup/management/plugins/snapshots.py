@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import json
 import shutil
 import socket
@@ -11,7 +12,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, List, Optional, cast
+from typing import Annotated, Optional, cast
 
 import django
 import typer
@@ -75,41 +76,13 @@ def backup(
     now = datetime.now(timezone.utc)
     self._backup_created_at = now
     self._backup_name = name or now.strftime("%Y-%m-%dT%H-%M-%S-UTC")
-    self._exporters = cast(list[AnyArtifactExporter], [])
     self._backup_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_backup_"))
 
-
-# ---------------------------------------------------------------------------
-# Helper: append exporters to the shared list
-# ---------------------------------------------------------------------------
-
-
-def _add_database_exporters(
-    self,
-    databases: Optional[list[str]] = None,
-    connector: Optional[str] = None,
-) -> None:
-    aliases = databases or list(django_settings.DATABASES.keys())
-    for alias in aliases:
-        exp = DatabaseArtifactExporter(db_alias=alias)
-        if connector:
-            import importlib
-
-            module_path, class_name = connector.rsplit(".", 1)
-            mod = importlib.import_module(module_path)
-            exp._connector = getattr(mod, class_name)()
-        self._exporters.append(exp)
-
-
-def _add_media_exporters(
-    self,
-    media_root: Optional[str] = None,
-) -> None:
-    self._exporters.append(MediaArtifactExporter(directory=media_root or ""))
-
-
-def _add_environment_exporters(self) -> None:
-    self._exporters.append(EnvironmentArtifactExporter())
+    # here we use the context to determine if a subcommand was invoked and
+    # if it was not we run all the backup routines
+    if not ctx.invoked_subcommand:
+        for cmd in [cmd for _, cmd in self.get_subcommand("backup").children.items()]:
+            cmd()
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +105,7 @@ def database(
         ),
     ] = False,
     databases: Annotated[
-        Optional[List[str]],
+        Optional[list[str]],
         typer.Option("--databases", help=str(_("DB aliases to export (default: all)"))),
     ] = None,
     connector: Annotated[
@@ -142,12 +115,21 @@ def database(
             help=str(_("Dotted path to connector class (overrides auto-detect)")),
         ),
     ] = None,
-) -> None:
+) -> list[DatabaseArtifactExporter]:
     if name is not None:
         self._backup_name = name
     if overwrite:
         self._backup_overwrite = overwrite
-    _add_database_exporters(self, databases=databases, connector=connector)
+    aliases = databases or list(django_settings.DATABASES.keys())
+    exporters = []
+    for alias in aliases:
+        exp = DatabaseArtifactExporter(db_alias=alias)
+        if connector:
+            module_path, class_name = connector.rsplit(".", 1)
+            mod = importlib.import_module(module_path)
+            exp._connector = getattr(mod, class_name)()
+        exporters.append(exp)
+    return exporters
 
 
 @backup.command(help=_("Export MEDIA_ROOT as a compressed tarball"))
@@ -167,12 +149,12 @@ def media(
         Optional[str],
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT path"))),
     ] = None,
-) -> None:
+) -> MediaArtifactExporter:
     if name is not None:
         self._backup_name = name
     if overwrite:
         self._backup_overwrite = overwrite
-    _add_media_exporters(self, media_root=media_root)
+    return MediaArtifactExporter(directory=media_root or "")
 
 
 @backup.command(help=_("Capture the current Python environment (pip freeze)"))
@@ -188,12 +170,12 @@ def environment(
             "--overwrite", help=str(_("Overwrite if snapshot already exists"))
         ),
     ] = False,
-) -> None:
+) -> EnvironmentArtifactExporter:
     if name is not None:
         self._backup_name = name
     if overwrite:
         self._backup_overwrite = overwrite
-    _add_environment_exporters(self)
+    return EnvironmentArtifactExporter()
 
 
 # ---------------------------------------------------------------------------
@@ -202,10 +184,15 @@ def environment(
 
 
 @backup.finalize()
-def backup_finalize(self, results: list) -> None:  # noqa: ARG001
+def backup_finalize(
+    self, results: list[AnyArtifactExporter | list[AnyArtifactExporter]]
+) -> None:  # noqa: ARG001
     """Check for collision, generate artifacts, compute checksums, write manifest."""
     try:
-        exporters = list(self._exporters)
+        # flatten the list of exporters (supporting nested lists/tuples)
+        exporters: list[AnyArtifactExporter] = [
+            y for x in results for y in (x if isinstance(x, (list, tuple)) else [x])
+        ]
 
         # Check for name collision (deferred to finalize so --name on subcommand works)
         manifest_path = f"{self._backup_name}/manifest.json"
@@ -214,13 +201,6 @@ def backup_finalize(self, results: list) -> None:  # noqa: ARG001
                 f"Snapshot {self._backup_name!r} already exists. "
                 "Use --overwrite to replace it."
             )
-
-        # If no subcommands ran (invoke_without_command), invoke all registered children
-        if not exporters:
-            backup_group = self.get_subcommand("backup")
-            for _child_name, child_cmd in backup_group.children.items():
-                child_cmd()
-            exporters = list(self._exporters)
 
         # ------------------------------------------------------------------ #
         # 1. Generate all artifacts concurrently                              #
