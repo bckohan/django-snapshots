@@ -12,7 +12,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Optional, cast
+from typing import Annotated, Any, Awaitable, Optional, cast
 
 import django
 import typer
@@ -165,7 +165,7 @@ def backup_finalize(
         # ------------------------------------------------------------------ #
         async def _gather() -> None:
             loop = asyncio.get_running_loop()
-            tasks = []
+            tasks: list[Awaitable[Any]] = []
             for exp in exporters:
                 dest = self._backup_temp_dir / exp.filename
                 if asyncio.iscoroutinefunction(exp.generate):
