@@ -17,6 +17,7 @@ from django.conf import settings as django_settings
 from django.utils.translation import gettext_lazy as _
 from tqdm.asyncio import tqdm as async_tqdm
 
+from django_snapshots.artifacts.protocols import AnyArtifactImporter
 from django_snapshots.completers import snapshot_names
 from django_snapshots.exceptions import (
     SnapshotEncryptionError,
@@ -112,10 +113,7 @@ def restore(
             shell_complete=snapshot_names,
         ),
     ] = None,
-) -> (
-    list[DatabaseArtifactImporter | MediaArtifactImporter | EnvironmentArtifactImporter]
-    | None
-):
+) -> list[AnyArtifactImporter] | None:
     """Initialise restore state and load manifest (runs before any subcommand)."""
     cmd = cast(_RestoreCommand, self)
     cmd._restore_storage = cmd.settings.storage
@@ -139,11 +137,7 @@ def restore(
         raise
 
     if not ctx.invoked_subcommand:
-        all_results: list[
-            DatabaseArtifactImporter
-            | MediaArtifactImporter
-            | EnvironmentArtifactImporter
-        ] = []
+        all_results: list[AnyArtifactImporter] = []
         for _, child in cmd.get_subcommand("restore").children.items():
             result = child()
             if result is None:
@@ -222,11 +216,7 @@ def environment(
 @restore.finalize()
 def restore_finalize(
     self,
-    results: list[
-        list[DatabaseArtifactImporter]
-        | MediaArtifactImporter
-        | EnvironmentArtifactImporter
-    ],
+    results: list[AnyArtifactImporter | list[AnyArtifactImporter]],
 ) -> None:
     """Download artifacts, verify checksums, and restore."""
     cmd = cast(_RestoreCommand, self)
@@ -243,10 +233,12 @@ def restore_finalize(
         artifact_map = {a.filename: a for a in snapshot.artifacts}
 
         # flatten the list of importers (supporting nested lists)
-        importers: list[Any] = [
+        importers: list[AnyArtifactImporter] = [
             y
             for x in results
-            for y in (x if isinstance(x, list) else cast(list[Any], [x]))
+            for y in (
+                x if isinstance(x, list) else cast(list[AnyArtifactImporter], [x])
+            )
         ]
 
         # ------------------------------------------------------------------ #

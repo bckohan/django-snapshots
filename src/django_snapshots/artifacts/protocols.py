@@ -52,6 +52,9 @@ class ArtifactImporterBase(Protocol):
 
     artifact_type: str
 
+    filename: str
+    """Filename of the artifact within the snapshot directory."""
+
 
 @runtime_checkable
 class ArtifactImporter(ArtifactImporterBase, Protocol):
