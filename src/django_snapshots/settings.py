@@ -14,6 +14,7 @@ Both are normalised to a SnapshotSettings instance in AppConfig.ready().
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 from dataclasses import dataclass, field
@@ -194,22 +195,27 @@ def ConfigSingleton(config_key: str):
 
         def __call__(cls: type[CB], *args, **kwargs):
             with _ConfigSingleton._lock:
+                if args or kwargs or _ConfigSingleton._initializing:
+                    # Explicit construction or re-entrant call during initialisation:
+                    # bypass the singleton cache and return a fresh instance.
+                    return super().__call__(*args, **kwargs)
                 if _ConfigSingleton._instance is None:
-                    if not args and not kwargs and not _ConfigSingleton._initializing:
-                        from django.conf import settings
+                    from django.conf import settings
 
-                        _ConfigSingleton._initializing = True
+                    _ConfigSingleton._initializing = True
+                    try:
                         _ConfigSingleton._instance = cls.coerce(
                             getattr(settings, _ConfigSingleton._config_key, {})
                         )
-                    else:
-                        _ConfigSingleton._instance = super().__call__(*args, **kwargs)
+                    finally:
+                        _ConfigSingleton._initializing = False
                 return _ConfigSingleton._instance
 
         @classmethod
         def clear(cls, setting, **_):
             if setting == cls._config_key:
-                cls._instance = None
+                with _ConfigSingleton._lock:
+                    cls._instance = None
 
     setting_changed.connect(_ConfigSingleton.clear)
     return _ConfigSingleton
@@ -225,7 +231,8 @@ class SnapshotSettings(ConfigBase, metaclass=ConfigSingleton("SNAPSHOTS")):  # t
     """
 
     storage: Any = None
-    """Storage backend instance or dict config. Required for actual use."""
+    """Storage backend instance. Defaults to :class:`~django_snapshots.storage.local.LocalFileSystemBackend`
+    rooted at the current working directory when not explicitly configured."""
 
     snapshot_format: SnapshotFormat = SnapshotFormat.DIRECTORY
     """Snapshot container format: ``"directory"`` (default) or ``"archive"``."""
@@ -246,6 +253,10 @@ class SnapshotSettings(ConfigBase, metaclass=ConfigSingleton("SNAPSHOTS")):  # t
     """Default retention policy used by ``snapshots prune`` when no flags are given."""
 
     def __post_init__(self) -> None:
+        if self.storage is None:
+            from django_snapshots.storage.local import LocalFileSystemBackend
+
+            self.storage = LocalFileSystemBackend(location=os.getcwd())
         if not isinstance(self.snapshot_format, SnapshotFormat):
             try:
                 self.snapshot_format = SnapshotFormat(self.snapshot_format)

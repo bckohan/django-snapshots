@@ -3,7 +3,10 @@ from dateutil.relativedelta import relativedelta
 
 
 def test_snapshot_settings_defaults():
+    import os
+
     from django_snapshots.settings import SnapshotSettings
+    from django_snapshots.storage.local import LocalFileSystemBackend
 
     s = SnapshotSettings()
     assert s.snapshot_format == "directory"
@@ -12,7 +15,8 @@ def test_snapshot_settings_defaults():
     assert s.encryption is None
     assert s.database_connectors == {}
     assert s.prune is None
-    assert s.storage is None
+    assert isinstance(s.storage, LocalFileSystemBackend)
+    assert s.storage.location == s.storage.location.__class__(os.getcwd())
 
 
 def test_prune_config_from_dict_full():
