@@ -24,7 +24,7 @@ def _backup_snap(snap_settings, name, *subcommands):
 
     subcommands = subcommands or ("database", "environment")
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "backup", *subcommands, "--name", name)
+        call_command("snapshots", "backup", "--name", name, *subcommands)
 
 
 @pytest.mark.skipif(
@@ -97,7 +97,7 @@ def test_import_subcommand_selection_only_restores_selected(tmp_path):
     _backup_snap(snap_settings, "sel-snap", "environment")
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "restore", "environment", "--name", "sel-snap")
+        call_command("snapshots", "restore", "--name", "sel-snap", "environment")
 
 
 @pytest.mark.django_db(transaction=True)
@@ -118,7 +118,7 @@ def test_import_raises_snapshot_integrity_error_on_corrupt_artifact(tmp_path):
     with override_settings(SNAPSHOTS=snap_settings):
         with pytest.raises((SnapshotIntegrityError, SystemExit)):
             call_command(
-                "snapshots", "restore", "environment", "--name", "corrupt-snap"
+                "snapshots", "restore", "--name", "corrupt-snap", "environment"
             )
 
 
@@ -206,10 +206,10 @@ def test_import_environment_check_only(tmp_path, capsys):
             call_command(
                 "snapshots",
                 "restore",
-                "environment",
-                "--check-only",
                 "--name",
                 "co-snap",
+                "environment",
+                "--check-only",
             )
         except SystemExit as e:
             assert e.code == 0
@@ -245,7 +245,7 @@ def test_import_media_merge_preserves_stale_files(tmp_path, settings):
     _backup_snap(snap_settings, "merge-snap", "media")
 
     with override_settings(SNAPSHOTS=snap_settings, MEDIA_ROOT=str(media_dir)):
-        call_command("snapshots", "restore", "media", "--merge", "--name", "merge-snap")
+        call_command("snapshots", "restore", "--name", "merge-snap", "media", "--merge")
 
     assert (media_dir / "stale.txt").exists(), "stale file should survive merge"
 

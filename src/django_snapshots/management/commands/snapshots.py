@@ -7,6 +7,7 @@ django-typer's plugin system (see their AppConfig.ready() methods).
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
 
 import typer
@@ -17,7 +18,7 @@ from django_typer.management import TyperCommand, command
 from django_snapshots._pip import _pip_freeze
 from django_snapshots.exceptions import SnapshotNotFoundError
 from django_snapshots.manifest import Snapshot
-from django_snapshots.settings import SnapshotSettings
+from django_snapshots.settings import SnapshotSettings, parse_iso8601_duration
 from django_snapshots.utils import (
     _check_pip_diff,
     _format_size,
@@ -30,9 +31,9 @@ from django_snapshots.utils import (
 class Command(TyperCommand):
     help = _("Manage snapshots")
 
-    settings: SnapshotSettings = SnapshotSettings.coerce(
-        getattr(django_settings, "SNAPSHOTS", {})
-    )
+    @property
+    def settings(self) -> SnapshotSettings:
+        return SnapshotSettings.coerce(getattr(django_settings, "SNAPSHOTS", {}))
 
     @command(help=str(_("List snapshots in storage")))
     def list(
@@ -190,20 +191,20 @@ class Command(TyperCommand):
             Optional[int],
             typer.Option("--keep", help=str(_("Keep the N most recent snapshots"))),
         ] = None,
-        keep_daily: Annotated[
-            Optional[int],
+        duration: Annotated[
+            Optional[str],
             typer.Option(
-                "--keep-daily",
-                help=str(_("Keep most recent snapshot from each of the last N days")),
+                "--duration",
+                help=str(
+                    _("Keep snapshots newer than this duration (ISO 8601, e.g. P30D)")
+                ),
             ),
         ] = None,
-        keep_weekly: Annotated[
+        max_size: Annotated[
             Optional[int],
             typer.Option(
-                "--keep-weekly",
-                help=str(
-                    _("Keep most recent snapshot from each of the last N ISO weeks")
-                ),
+                "--max-size",
+                help=str(_("Maximum total bytes to retain (at least one always kept)")),
             ),
         ] = None,
         force: Annotated[
@@ -217,17 +218,25 @@ class Command(TyperCommand):
         prune_cfg = self.settings.prune
         if keep is None and prune_cfg:
             keep = prune_cfg.keep
-        if keep_daily is None and prune_cfg:
-            keep_daily = prune_cfg.keep_daily
-        if keep_weekly is None and prune_cfg:
-            keep_weekly = prune_cfg.keep_weekly
+        parsed_duration = parse_iso8601_duration(duration) if duration else None
+        if parsed_duration is None and prune_cfg:
+            parsed_duration = prune_cfg.duration
+        if max_size is None and prune_cfg:
+            max_size = prune_cfg.max_size
 
-        if keep is None and keep_daily is None and keep_weekly is None:
+        if keep is None and parsed_duration is None and max_size is None:
             self.echo("No prune policy configured.")
             return
 
+        # Compute the cutoff datetime once at command start
+        cutoff = (
+            datetime.now(timezone.utc) - parsed_duration
+            if parsed_duration is not None
+            else None
+        )
+
         snapshots = list_snapshots(storage)
-        to_delete = _snapshots_to_prune(snapshots, keep, keep_daily, keep_weekly)
+        to_delete = _snapshots_to_prune(snapshots, keep, cutoff, max_size)
 
         if not to_delete:
             self.echo("Nothing to prune.")

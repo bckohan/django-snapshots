@@ -40,7 +40,7 @@ def test_restore_no_subcommand_invokes_all_children(tmp_path):
 
     # Create a snapshot with an environment artifact
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "backup", "environment", "--name", "env-snap")
+        call_command("snapshots", "backup", "--name", "env-snap", "environment")
 
     # Restore without specifying a subcommand — should invoke all children
     with override_settings(SNAPSHOTS=snap_settings):
@@ -60,7 +60,7 @@ def test_backup_explicit_subcommand_does_not_invoke_all(tmp_path):
     snap_settings = _make_settings(tmp_path)
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "backup", "environment", "--name", "env-only")
+        call_command("snapshots", "backup", "--name", "env-only", "environment")
 
     storage = LocalFileSystemBackend(location=str(tmp_path / "storage"))
     assert storage.exists("env-only/manifest.json")

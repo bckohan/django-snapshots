@@ -14,12 +14,82 @@ Both are normalised to a SnapshotSettings instance in AppConfig.ready().
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Protocol
 
+from dateutil.relativedelta import relativedelta
 from django.core.exceptions import ImproperlyConfigured
 from typing_extensions import Self
+
+# ---------------------------------------------------------------------------
+# ISO 8601 duration helpers
+# ---------------------------------------------------------------------------
+
+_ISO8601_RE = re.compile(
+    r"^P"
+    r"(?:(\d+)Y)?"
+    r"(?:(\d+)M)?"
+    r"(?:(\d+)W)?"
+    r"(?:(\d+)D)?"
+    r"(?:T"
+    r"(?:(\d+)H)?"
+    r"(?:(\d+)M)?"
+    r"(?:(\d+(?:\.\d+)?)S)?"
+    r")?$"
+)
+
+
+def parse_iso8601_duration(value: str) -> relativedelta:
+    """Parse an ISO 8601 duration string into a :class:`~dateutil.relativedelta.relativedelta`.
+
+    Years, months, weeks, days, hours, minutes, and seconds are all supported.
+
+    Raises :exc:`django.core.exceptions.ImproperlyConfigured` on invalid input.
+    """
+    m = _ISO8601_RE.match(value)
+    if not m or not any(m.groups()):
+        raise ImproperlyConfigured(
+            f"Invalid ISO 8601 duration string: {value!r}. "
+            "Expected a string like 'P1Y', 'P30D', 'P2W', 'PT12H', or 'P1DT6H'."
+        )
+    years, months, weeks, days, hours, minutes, seconds = m.groups()
+    return relativedelta(
+        years=int(years or 0),
+        months=int(months or 0),
+        weeks=int(weeks or 0),
+        days=int(days or 0),
+        hours=int(hours or 0),
+        minutes=int(minutes or 0),
+        seconds=int(float(seconds or 0)),
+    )
+
+
+def relativedelta_to_iso8601(rd: relativedelta) -> str:
+    """Serialize a :class:`~dateutil.relativedelta.relativedelta` to an ISO 8601 duration string."""
+    result = "P"
+    if rd.years:
+        result += f"{rd.years}Y"
+    if rd.months:
+        result += f"{rd.months}M"
+    if rd.days:
+        result += f"{rd.days}D"
+    time_part = ""
+    if rd.hours:
+        time_part += f"{rd.hours}H"
+    if rd.minutes:
+        time_part += f"{rd.minutes}M"
+    if rd.seconds:
+        time_part += f"{int(rd.seconds)}S"
+    if time_part:
+        result += f"T{time_part}"
+    return result if result != "P" else "PT0S"
+
+
+# ---------------------------------------------------------------------------
+# ConfigBase protocol
+# ---------------------------------------------------------------------------
 
 
 class ConfigBase(Protocol):
@@ -40,6 +110,11 @@ class ConfigBase(Protocol):
         return data
 
 
+# ---------------------------------------------------------------------------
+# Settings dataclasses
+# ---------------------------------------------------------------------------
+
+
 @dataclass
 class PruneConfig(ConfigBase):
     """Retention policy for the prune command.
@@ -50,25 +125,45 @@ class PruneConfig(ConfigBase):
     keep: int | None = None
     """Keep the N most recent snapshots."""
 
-    keep_daily: int | None = None
-    """Keep the most recent snapshot from each of the last N calendar days (UTC)."""
+    duration: relativedelta | None = None
+    """Keep all snapshots newer than this duration (e.g. ``relativedelta(days=30)``)."""
 
-    keep_weekly: int | None = None
-    """Keep the most recent snapshot from each of the last N ISO weeks."""
+    max_size: int | None = None
+    """Maximum total bytes to retain. At least one snapshot is always kept."""
 
     def __post_init__(self) -> None:
-        for field_name in ("keep", "keep_daily", "keep_weekly"):
-            value = getattr(self, field_name)
-            if value is not None and value < 1:
+        if self.keep is not None and self.keep < 1:
+            raise ImproperlyConfigured(
+                f"SNAPSHOTS['prune']['keep'] must be a positive integer, got {self.keep!r}."
+            )
+        if self.duration is not None:
+            rd = self.duration
+            fields = [
+                rd.years,
+                rd.months,
+                rd.days,
+                rd.hours,
+                rd.minutes,
+                rd.seconds,
+                rd.microseconds,
+            ]
+            if any(f < 0 for f in fields) or not any(f > 0 for f in fields):
                 raise ImproperlyConfigured(
-                    f"SNAPSHOTS['prune']['{field_name}'] must be a positive integer, got {value!r}."
+                    "SNAPSHOTS['prune']['duration'] must be a positive duration."
                 )
+        if self.max_size is not None and self.max_size < 1:
+            raise ImproperlyConfigured(
+                f"SNAPSHOTS['prune']['max_size'] must be a positive integer, got {self.max_size!r}."
+            )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PruneConfig:
         try:
-            return cls(**data)
-        except TypeError as e:
+            kwargs = dict(data)
+            if isinstance(kwargs.get("duration"), str):
+                kwargs["duration"] = parse_iso8601_duration(kwargs["duration"])
+            return cls(**kwargs)
+        except (TypeError, ImproperlyConfigured) as e:
             raise ImproperlyConfigured(
                 f"Invalid SNAPSHOTS['prune'] configuration: {e}"
             ) from e
@@ -76,8 +171,10 @@ class PruneConfig(ConfigBase):
     def to_dict(self) -> dict[str, Any]:
         return {
             "keep": self.keep,
-            "keep_daily": self.keep_daily,
-            "keep_weekly": self.keep_weekly,
+            "duration": relativedelta_to_iso8601(self.duration)
+            if self.duration
+            else None,
+            "max_size": self.max_size,
         }
 
 

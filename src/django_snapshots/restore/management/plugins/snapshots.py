@@ -32,11 +32,12 @@ from ...artifacts.media import MediaArtifactImporter
 if TYPE_CHECKING:
     from django_snapshots.storage.protocols import SnapshotStorage
 
-    class _RestoreCommand(SnapshotsCommand):
-        _restore_storage: SnapshotStorage
-        _restore_temp_dir: Path
-        _restore_snapshot: Snapshot
-        _restore_name: str
+
+class _RestoreCommand(SnapshotsCommand):
+    _restore_storage: SnapshotStorage
+    _restore_temp_dir: Path
+    _restore_snapshot: Snapshot
+    _restore_name: str
 
 
 def _sha256(path: Path) -> str:
@@ -99,35 +100,50 @@ def _create_database_importers(
     help=str(_("Restore a snapshot")),
 )
 def restore(
-    self: _RestoreCommand,
+    self,
     ctx: typer.Context,
     name: Annotated[
         Optional[str],
         typer.Option(help=str(_("Snapshot name (default: latest)"))),
     ] = None,
-) -> None:
+) -> (
+    list[DatabaseArtifactImporter | MediaArtifactImporter | EnvironmentArtifactImporter]
+    | None
+):
     """Initialise restore state and load manifest (runs before any subcommand)."""
-    self._restore_storage = self.settings.storage
-    self._restore_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_restore_"))
+    cmd = cast(_RestoreCommand, self)
+    cmd._restore_storage = cmd.settings.storage
+    cmd._restore_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_restore_"))
     try:
-        resolved_name = name or _resolve_latest(self._restore_storage)
-        if not self._restore_storage.exists(f"{resolved_name}/manifest.json"):
+        resolved_name = name or _resolve_latest(cmd._restore_storage)
+        if not cmd._restore_storage.exists(f"{resolved_name}/manifest.json"):
             raise SnapshotNotFoundError(
                 f"Snapshot {resolved_name!r} not found in storage "
                 f"(missing '{resolved_name}/manifest.json')."
             )
-        with self._restore_storage.read(f"{resolved_name}/manifest.json") as f:
-            self._restore_snapshot = Snapshot.from_dict(json.load(f))
-        self._restore_name = resolved_name
+        with cmd._restore_storage.read(f"{resolved_name}/manifest.json") as f:
+            cmd._restore_snapshot = Snapshot.from_dict(json.load(f))
+        cmd._restore_name = resolved_name
     except Exception:
-        shutil.rmtree(self._restore_temp_dir, ignore_errors=True)
+        shutil.rmtree(cmd._restore_temp_dir, ignore_errors=True)
         raise
 
-    # here we use the context to determine if a subcommand was invoked and
-    # if it was not we run all the restore routines
     if not ctx.invoked_subcommand:
-        for cmd in [cmd for _, cmd in self.get_subcommand("restore").children.items()]:
-            cmd()
+        all_results: list[
+            DatabaseArtifactImporter
+            | MediaArtifactImporter
+            | EnvironmentArtifactImporter
+        ] = []
+        for _, child in cmd.get_subcommand("restore").children.items():
+            result = child()
+            if result is None:
+                continue
+            if isinstance(result, list):
+                all_results.extend(result)
+            else:
+                all_results.append(result)
+        return all_results
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +153,7 @@ def restore(
 
 @restore.command(help=str(_("Restore database(s) from compressed SQL dumps")))
 def database(
-    self: _RestoreCommand,
+    self,
     databases: Annotated[
         Optional[List[str]],
         typer.Option(
@@ -146,16 +162,17 @@ def database(
         ),
     ] = None,
 ) -> list[DatabaseArtifactImporter]:
-    importers = _create_database_importers(self._restore_snapshot, databases=databases)
+    cmd = cast(_RestoreCommand, self)
+    importers = _create_database_importers(cmd._restore_snapshot, databases=databases)
     if sys.stdin.isatty():
         aliases = [i.db_alias for i in importers]
-        self.echo(f"  Databases : {', '.join(aliases)}")
+        cmd.echo(f"  Databases : {', '.join(aliases)}")
     return importers
 
 
 @restore.command(help=str(_("Restore MEDIA_ROOT from compressed tarball")))
 def media(
-    self: _RestoreCommand,
+    self,
     media_root: Annotated[
         Optional[str],
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT restore path"))),
@@ -170,13 +187,13 @@ def media(
 ) -> MediaArtifactImporter:
     imp = MediaArtifactImporter(directory=media_root or "", merge=merge)
     if sys.stdin.isatty():
-        self.echo(f"  Directory : {imp.directory}")
+        cast(SnapshotsCommand, self).echo(f"  Directory : {imp.directory}")
     return imp
 
 
 @restore.command(help=str(_("Show diff between snapshot environment and current")))
 def environment(
-    self: _RestoreCommand,
+    self,
     check_only: Annotated[
         bool,
         typer.Option(
@@ -194,7 +211,7 @@ def environment(
 
 @restore.finalize()
 def restore_finalize(
-    self: _RestoreCommand,
+    self,
     results: list[
         list[DatabaseArtifactImporter]
         | MediaArtifactImporter
@@ -202,10 +219,11 @@ def restore_finalize(
     ],
 ) -> None:
     """Download artifacts, verify checksums, and restore."""
+    cmd = cast(_RestoreCommand, self)
     try:
-        storage = self._restore_storage
-        name = self._restore_name
-        snapshot = self._restore_snapshot
+        storage = cmd._restore_storage
+        name = cmd._restore_name
+        snapshot = cmd._restore_snapshot
 
         if snapshot.encrypted:
             raise SnapshotEncryptionError(
@@ -237,7 +255,7 @@ def restore_finalize(
                 (a for a in snapshot.artifacts if a.type == "environment"), None
             )
             if env_art:
-                env_dest = self._restore_temp_dir / env_art.filename
+                env_dest = cmd._restore_temp_dir / env_art.filename
                 with storage.read(f"{name}/{env_art.filename}") as f:
                     env_dest.write_bytes(f.read())
                 check_only_imp.restore(env_dest)
@@ -259,7 +277,7 @@ def restore_finalize(
             if filename in artifact_map:
                 pairs.append((imp, filename))
             else:
-                self.echo(
+                cmd.echo(
                     f"Warning: artifact {filename!r} not found in snapshot {name!r}; skipping.",
                     err=True,
                 )
@@ -275,7 +293,7 @@ def restore_finalize(
             loop = asyncio.get_running_loop()
             tasks = [
                 loop.run_in_executor(
-                    None, _download_one, filename, self._restore_temp_dir / filename
+                    None, _download_one, filename, cmd._restore_temp_dir / filename
                 )
                 for _, filename in pairs
             ]
@@ -287,7 +305,7 @@ def restore_finalize(
         # 4. Verify checksums (all-or-nothing before any restore runs)        #
         # ------------------------------------------------------------------ #
         for _, filename in pairs:
-            dest = self._restore_temp_dir / filename
+            dest = cmd._restore_temp_dir / filename
             expected = artifact_map[filename].checksum
             actual = f"sha256:{_sha256(dest)}"
             if actual != expected:
@@ -303,7 +321,7 @@ def restore_finalize(
             loop = asyncio.get_running_loop()
             tasks: list[Awaitable[Any]] = []
             for imp, filename in pairs:
-                src = self._restore_temp_dir / filename
+                src = cmd._restore_temp_dir / filename
                 if asyncio.iscoroutinefunction(imp.restore):
                     tasks.append(imp.restore(src))
                 else:
@@ -312,10 +330,10 @@ def restore_finalize(
 
         syncify(_gather_restores, raise_sync_error=False)()
 
-        self.echo(f"Snapshot restored: {name}")
+        cmd.echo(f"Snapshot restored: {name}")
 
     finally:
         shutil.rmtree(
-            getattr(self, "_restore_temp_dir", None) or Path("/nonexistent"),
+            getattr(cmd, "_restore_temp_dir", None) or Path("/nonexistent"),
             ignore_errors=True,
         )

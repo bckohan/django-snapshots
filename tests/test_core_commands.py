@@ -21,7 +21,7 @@ def _backup_snap(snap_settings, name):
     from django.core.management import call_command
 
     with override_settings(SNAPSHOTS=snap_settings):
-        call_command("snapshots", "backup", "environment", "--name", name)
+        call_command("snapshots", "backup", "--name", name, "environment")
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ def test_format_size_gigabytes():
 def test_snapshots_to_prune_keep(tmp_path):
     """keep=1 retains only the newest, marks rest for deletion."""
     from django_snapshots.utils import _snapshots_to_prune
-    from django_snapshots.manifest import ArtifactRecord, Snapshot
+    from django_snapshots.manifest import Snapshot
     from datetime import datetime, timezone
 
     def make_snap(name, hour):
@@ -74,13 +74,13 @@ def test_snapshots_to_prune_keep(tmp_path):
         )
 
     snaps = [make_snap("new", 12), make_snap("mid", 6), make_snap("old", 1)]
-    to_delete = _snapshots_to_prune(snaps, keep=1, keep_daily=None, keep_weekly=None)
+    to_delete = _snapshots_to_prune(snaps, keep=1, cutoff=None)
     assert len(to_delete) == 2
     assert all(s.name != "new" for s in to_delete)
 
 
-def test_snapshots_to_prune_keep_daily(tmp_path):
-    """keep_daily=1 retains most recent from 1 day, deletes same-day older ones."""
+def test_snapshots_to_prune_duration():
+    """cutoff retains snapshots newer than it, deletes older ones."""
     from django_snapshots.utils import _snapshots_to_prune
     from django_snapshots.manifest import Snapshot
     from datetime import datetime, timezone
@@ -99,8 +99,11 @@ def test_snapshots_to_prune_keep_daily(tmp_path):
             artifacts=[],
         )
 
+    # noon=6h before now, morning=12h before now; cutoff=10h before now keeps only noon
+    now = datetime(2026, 3, 1, 18, 0, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)  # now - 8h
     snaps = [make_snap("noon", 12), make_snap("morning", 6)]
-    to_delete = _snapshots_to_prune(snaps, keep=None, keep_daily=1, keep_weekly=None)
+    to_delete = _snapshots_to_prune(snaps, keep=None, cutoff=cutoff)
     assert len(to_delete) == 1
     assert to_delete[0].name == "morning"
 
@@ -125,16 +128,16 @@ def test_snapshots_to_prune_union_semantics():
             artifacts=[],
         )
 
-    # 3 snaps on 3 different days; keep=1 keeps day-3, keep_daily=2 keeps day-3 and day-2
+    # keep=1 retains day3; cutoff=Mar 2 retains day3 and day2; day1 deleted
+    cutoff = datetime(2026, 3, 2, 12, 0, 0, tzinfo=timezone.utc)  # now(Mar4) - 2d
     snaps = [make_snap("day3", 3), make_snap("day2", 2), make_snap("day1", 1)]
-    to_delete = _snapshots_to_prune(snaps, keep=1, keep_daily=2, keep_weekly=None)
-    # day1 is not retained by either policy
+    to_delete = _snapshots_to_prune(snaps, keep=1, cutoff=cutoff)
     assert len(to_delete) == 1
     assert to_delete[0].name == "day1"
 
 
-def test_snapshots_to_prune_keep_weekly():
-    """keep_weekly=2 retains the most recent from each of 2 ISO weeks."""
+def test_snapshots_to_prune_duration_weeks():
+    """cutoff=1W ago retains all snapshots from the last 7 days."""
     from django_snapshots.utils import _snapshots_to_prune
     from django_snapshots.manifest import Snapshot
     from datetime import datetime, timezone
@@ -153,21 +156,128 @@ def test_snapshots_to_prune_keep_weekly():
             artifacts=[],
         )
 
-    # 2026 ISO week 11: Mar 9–15; week 10: Mar 2–8; week 9: Feb 23 – Mar 1
-    # newest-first: mar15, mar14 (both week 11), mar8 (week 10), mar1 (week 9)
+    # now=Mar 15; cutoff=Mar 8; mar15/mar14/mar8 retained, mar1 deleted
+    cutoff = datetime(2026, 3, 8, 12, 0, 0, tzinfo=timezone.utc)  # now(Mar15) - 1W
     snaps = [
         make_snap("mar15", 15),
         make_snap("mar14", 14),
         make_snap("mar8", 8),
         make_snap("mar1", 1),
     ]
-    to_delete = _snapshots_to_prune(snaps, keep=None, keep_daily=None, keep_weekly=2)
+    to_delete = _snapshots_to_prune(snaps, keep=None, cutoff=cutoff)
     retained = {s.name for s in snaps} - {s.name for s in to_delete}
-    # Most recent from week 11 (mar15) and week 10 (mar8) are retained
     assert "mar15" in retained
-    assert "mar8" in retained
-    assert "mar14" not in retained  # second entry from week 11
-    assert "mar1" not in retained  # week 9, beyond keep_weekly=2
+    assert "mar14" in retained
+    assert "mar8" in retained  # exactly at cutoff — retained
+    assert "mar1" not in retained
+
+
+def test_snapshots_to_prune_max_size():
+    """max_size retains newest snapshots within budget, always keeping at least one."""
+    from django_snapshots.utils import _snapshots_to_prune
+    from django_snapshots.manifest import Snapshot, ArtifactRecord
+    from datetime import datetime, timezone
+
+    def make_snap(name, day, size):
+        return Snapshot(
+            version="1",
+            name=name,
+            created_at=datetime(2026, 3, day, 12, 0, 0, tzinfo=timezone.utc),
+            django_version="5.2",
+            python_version="3.12",
+            hostname="h",
+            encrypted=False,
+            pip=[],
+            metadata={},
+            artifacts=[
+                ArtifactRecord(
+                    type="database",
+                    filename="db.dump",
+                    size=size,
+                    checksum="sha256:abc",
+                    created_at=datetime(2026, 3, day, 12, 0, 0, tzinfo=timezone.utc),
+                )
+            ],
+        )
+
+    # newest=500B, mid=400B, old=300B; budget=600B → keeps newest (500B), mid would exceed
+    snaps = [
+        make_snap("newest", 3, 500),
+        make_snap("mid", 2, 400),
+        make_snap("old", 1, 300),
+    ]
+    to_delete = _snapshots_to_prune(snaps, keep=None, cutoff=None, max_size=600)
+    retained = {s.name for s in snaps} - {s.name for s in to_delete}
+    assert "newest" in retained
+    assert "mid" not in retained
+    assert "old" not in retained
+
+
+def test_snapshots_to_prune_max_size_always_keeps_one():
+    """Even if the single snapshot exceeds max_size, it is still kept."""
+    from django_snapshots.utils import _snapshots_to_prune
+    from django_snapshots.manifest import Snapshot, ArtifactRecord
+    from datetime import datetime, timezone
+
+    snap = Snapshot(
+        version="1",
+        name="huge",
+        created_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc),
+        django_version="5.2",
+        python_version="3.12",
+        hostname="h",
+        encrypted=False,
+        pip=[],
+        metadata={},
+        artifacts=[
+            ArtifactRecord(
+                type="database",
+                filename="db.dump",
+                size=10_000_000,
+                checksum="sha256:abc",
+                created_at=datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc),
+            )
+        ],
+    )
+    to_delete = _snapshots_to_prune([snap], keep=None, cutoff=None, max_size=1)
+    assert to_delete == []
+
+
+def test_snapshots_to_prune_max_size_union_with_keep():
+    """keep=2 retains 2 newest; max_size only retains 1; union keeps both."""
+    from django_snapshots.utils import _snapshots_to_prune
+    from django_snapshots.manifest import Snapshot, ArtifactRecord
+    from datetime import datetime, timezone
+
+    def make_snap(name, day, size):
+        return Snapshot(
+            version="1",
+            name=name,
+            created_at=datetime(2026, 3, day, 12, 0, 0, tzinfo=timezone.utc),
+            django_version="5.2",
+            python_version="3.12",
+            hostname="h",
+            encrypted=False,
+            pip=[],
+            metadata={},
+            artifacts=[
+                ArtifactRecord(
+                    type="database",
+                    filename="db.dump",
+                    size=size,
+                    checksum="sha256:abc",
+                    created_at=datetime(2026, 3, day, 12, 0, 0, tzinfo=timezone.utc),
+                )
+            ],
+        )
+
+    snaps = [make_snap("a", 3, 500), make_snap("b", 2, 500), make_snap("c", 1, 500)]
+    # max_size=600 keeps only "a"; keep=2 keeps "a" and "b"; union keeps both
+    to_delete = _snapshots_to_prune(snaps, keep=2, cutoff=None, max_size=600)
+    retained = {s.name for s in snaps} - {s.name for s in to_delete}
+    assert "a" in retained
+    assert "b" in retained
+    assert "c" not in retained
 
 
 def test_check_pip_diff_missing_extra_mismatch():

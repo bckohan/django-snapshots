@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from django_snapshots.manifest import Snapshot
 
 
@@ -52,13 +54,19 @@ def _format_size(size: int) -> str:
 def _snapshots_to_prune(
     snapshots: list[Snapshot],
     keep: int | None,
-    keep_daily: int | None,
-    keep_weekly: int | None,
+    cutoff: datetime | None,
+    max_size: int | None = None,
 ) -> list[Snapshot]:
     """Return snapshots to DELETE using union retention semantics.
 
     *snapshots* must be sorted newest-first.
     A snapshot is retained if *any* policy says to keep it.
+
+    *cutoff* is an absolute UTC datetime; snapshots at or after it are kept.
+    Compute it at call time with ``datetime.now(timezone.utc) - relativedelta(...)``.
+
+    *max_size* is a total-bytes budget; the newest snapshots that fit are kept,
+    with at least one always retained regardless of size.
     """
     retain: set[str] = set()
 
@@ -66,26 +74,18 @@ def _snapshots_to_prune(
         for s in snapshots[:keep]:
             retain.add(s.name)
 
-    if keep_daily is not None:
-        seen_days: set[str] = set()
+    if cutoff is not None:
         for s in snapshots:
-            day = s.created_at.date().isoformat()
-            if day not in seen_days:
-                seen_days.add(day)
+            if s.created_at >= cutoff:
                 retain.add(s.name)
-            if len(seen_days) >= keep_daily:
-                break
 
-    if keep_weekly is not None:
-        seen_weeks: set[str] = set()
-        for s in snapshots:
-            iso = s.created_at.isocalendar()
-            week = f"{iso[0]}-W{iso[1]:02d}"
-            if week not in seen_weeks:
-                seen_weeks.add(week)
+    if max_size is not None:
+        cumulative = 0
+        for i, s in enumerate(snapshots):
+            snap_size = sum(a.size for a in s.artifacts)
+            if i == 0 or cumulative + snap_size <= max_size:
                 retain.add(s.name)
-            if len(seen_weeks) >= keep_weekly:
-                break
+                cumulative += snap_size
 
     return [s for s in snapshots if s.name not in retain]
 

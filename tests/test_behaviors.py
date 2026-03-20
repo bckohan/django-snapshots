@@ -249,15 +249,16 @@ def test_settings_dict_with_prune_normalised_correctly():
     s = SnapshotSettings.from_dict(
         {
             "snapshot_format": "directory",
-            "prune": {"keep": 30, "keep_daily": 14, "keep_weekly": 8},
+            "prune": {"keep": 30, "duration": "P14D"},
             "metadata": {"project": "my-app"},
         }
     )
+    from dateutil.relativedelta import relativedelta
+
     assert s.snapshot_format == "directory"
     assert s.prune is not None
     assert s.prune.keep == 30
-    assert s.prune.keep_daily == 14
-    assert s.prune.keep_weekly == 8
+    assert s.prune.duration == relativedelta(days=14)
     assert s.metadata == {"project": "my-app"}
 
 
