@@ -156,15 +156,16 @@ def test_import_prompts_and_aborts_when_tty_and_declined(tmp_path, monkeypatch):
 
 @pytest.mark.django_db(transaction=True)
 def test_import_raises_snapshot_not_found_for_missing_name(tmp_path):
-    """Importing a non-existent snapshot name raises SnapshotNotFoundError."""
+    """Importing a non-existent snapshot name raises an error."""
     from django.core.management import call_command
+    from django.core.management.base import CommandError
 
     from django_snapshots.exceptions import SnapshotNotFoundError
 
     snap_settings = _make_settings(tmp_path)
 
     with override_settings(SNAPSHOTS=snap_settings):
-        with pytest.raises((SnapshotNotFoundError, SystemExit)):
+        with pytest.raises((SnapshotNotFoundError, SystemExit, CommandError)):
             call_command("snapshots", "restore", "--name", "does-not-exist")
 
 

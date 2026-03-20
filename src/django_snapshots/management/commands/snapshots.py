@@ -15,9 +15,11 @@ from django.utils.translation import gettext_lazy as _
 from django_typer.management import TyperCommand, command
 
 from django_snapshots._pip import _pip_freeze
+from django_snapshots.completers import snapshot_names
 from django_snapshots.defines import InfoFormat, ListFormat
 from django_snapshots.exceptions import SnapshotNotFoundError
 from django_snapshots.manifest import Snapshot
+from django_snapshots.parsers import SNAPSHOT
 from django_snapshots.settings import SnapshotSettings, parse_iso8601_duration
 from django_snapshots.utils import (
     _check_pip_diff,
@@ -97,7 +99,12 @@ class Command(TyperCommand):
     def delete(
         self,
         name: Annotated[
-            Optional[str], typer.Argument(help=str(_("Snapshot name")))
+            Optional[Snapshot],
+            typer.Argument(
+                help=str(_("Snapshot name")),
+                click_type=SNAPSHOT,
+                shell_complete=snapshot_names,
+            ),
         ] = None,
         all_: Annotated[
             bool,
@@ -128,21 +135,25 @@ class Command(TyperCommand):
             self.echo("Error: provide a snapshot name or use --all.", err=True)
             raise SystemExit(1)
 
-        if not storage.exists(f"{name}/manifest.json"):
-            raise SnapshotNotFoundError(f"Snapshot {name!r} not found in storage.")
-
         if not force:
-            answer = input(f"Delete snapshot {name!r}? [y/N] ")
+            answer = input(f"Delete snapshot {name.name!r}? [y/N] ")
             if answer.strip().lower() != "y":
                 raise SystemExit(0)
 
-        delete_snapshot(storage, name)
-        self.echo(f"Deleted snapshot {name!r}.")
+        delete_snapshot(storage, name.name)
+        self.echo(f"Deleted snapshot {name.name!r}.")
 
     @command(help=str(_("Show full details for a snapshot")))
     def info(
         self,
-        name: Annotated[str, typer.Argument(help=str(_("Snapshot name")))],
+        name: Annotated[
+            Snapshot,
+            typer.Argument(
+                help=str(_("Snapshot name")),
+                click_type=SNAPSHOT,
+                shell_complete=snapshot_names,
+            ),
+        ],
         fmt: Annotated[
             InfoFormat,
             typer.Option(
@@ -152,7 +163,7 @@ class Command(TyperCommand):
             ),
         ] = InfoFormat.TABLE,
     ) -> None:
-        snapshot = Snapshot.from_storage(self.settings.storage, name)
+        snapshot = name
 
         if fmt == InfoFormat.JSON:
             self.echo(json.dumps(snapshot.to_dict(), indent=2, default=str))
@@ -261,8 +272,12 @@ class Command(TyperCommand):
     def check_env(
         self,
         name: Annotated[
-            Optional[str],
-            typer.Argument(help=str(_("Snapshot name (default: latest)"))),
+            Optional[Snapshot],
+            typer.Argument(
+                help=str(_("Snapshot name (default: latest)")),
+                click_type=SNAPSHOT,
+                shell_complete=snapshot_names,
+            ),
         ] = None,
         strict: Annotated[
             bool,
@@ -280,7 +295,7 @@ class Command(TyperCommand):
                 raise SnapshotNotFoundError("No snapshots found in storage.")
             snapshot = snapshots[0]
         else:
-            snapshot = Snapshot.from_storage(storage, name)
+            snapshot = name
 
         current_pip = _pip_freeze()
         missing, extra, mismatches = _check_pip_diff(snapshot.pip, current_pip)

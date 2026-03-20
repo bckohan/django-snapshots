@@ -17,6 +17,7 @@ from django.conf import settings as django_settings
 from django.utils.translation import gettext_lazy as _
 from tqdm.asyncio import tqdm as async_tqdm
 
+from django_snapshots.completers import snapshot_names
 from django_snapshots.exceptions import (
     SnapshotEncryptionError,
     SnapshotIntegrityError,
@@ -24,6 +25,7 @@ from django_snapshots.exceptions import (
 )
 from django_snapshots.management.commands.snapshots import Command as SnapshotsCommand
 from django_snapshots.manifest import Snapshot
+from django_snapshots.parsers import SNAPSHOT
 
 from ...artifacts.database import DatabaseArtifactImporter
 from ...artifacts.environment import EnvironmentArtifactImporter
@@ -103,8 +105,12 @@ def restore(
     self,
     ctx: typer.Context,
     name: Annotated[
-        Optional[str],
-        typer.Option(help=str(_("Snapshot name (default: latest)"))),
+        Optional[Snapshot],
+        typer.Option(
+            help=str(_("Snapshot name (default: latest)")),
+            click_type=SNAPSHOT,
+            shell_complete=snapshot_names,
+        ),
     ] = None,
 ) -> (
     list[DatabaseArtifactImporter | MediaArtifactImporter | EnvironmentArtifactImporter]
@@ -115,15 +121,19 @@ def restore(
     cmd._restore_storage = cmd.settings.storage
     cmd._restore_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_restore_"))
     try:
-        resolved_name = name or _resolve_latest(cmd._restore_storage)
-        if not cmd._restore_storage.exists(f"{resolved_name}/manifest.json"):
-            raise SnapshotNotFoundError(
-                f"Snapshot {resolved_name!r} not found in storage "
-                f"(missing '{resolved_name}/manifest.json')."
-            )
-        with cmd._restore_storage.read(f"{resolved_name}/manifest.json") as f:
-            cmd._restore_snapshot = Snapshot.from_dict(json.load(f))
-        cmd._restore_name = resolved_name
+        if name is not None:
+            cmd._restore_snapshot = name
+            cmd._restore_name = name.name
+        else:
+            resolved_name = _resolve_latest(cmd._restore_storage)
+            if not cmd._restore_storage.exists(f"{resolved_name}/manifest.json"):
+                raise SnapshotNotFoundError(
+                    f"Snapshot {resolved_name!r} not found in storage "
+                    f"(missing '{resolved_name}/manifest.json')."
+                )
+            with cmd._restore_storage.read(f"{resolved_name}/manifest.json") as f:
+                cmd._restore_snapshot = Snapshot.from_dict(json.load(f))
+            cmd._restore_name = resolved_name
     except Exception:
         shutil.rmtree(cmd._restore_temp_dir, ignore_errors=True)
         raise

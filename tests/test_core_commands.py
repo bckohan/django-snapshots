@@ -457,14 +457,15 @@ def test_delete_all_force(tmp_path):
 
 @pytest.mark.django_db(transaction=True)
 def test_delete_missing_raises(tmp_path):
-    """delete <name> for a non-existent snapshot raises SnapshotNotFoundError."""
+    """delete <name> for a non-existent snapshot raises an error."""
     from django.core.management import call_command
+    from django.core.management.base import CommandError
     from django_snapshots.exceptions import SnapshotNotFoundError
 
     snap_settings = _make_settings(tmp_path)
 
     with override_settings(SNAPSHOTS=snap_settings):
-        with pytest.raises((SnapshotNotFoundError, SystemExit)):
+        with pytest.raises((SnapshotNotFoundError, SystemExit, CommandError)):
             call_command("snapshots", "delete", "does-not-exist", "--force")
 
 
@@ -563,14 +564,15 @@ def test_info_json(tmp_path, capsys):
 
 @pytest.mark.django_db(transaction=True)
 def test_info_missing_raises(tmp_path):
-    """info for a non-existent snapshot raises SnapshotNotFoundError."""
+    """info for a non-existent snapshot raises an error."""
     from django.core.management import call_command
+    from django.core.management.base import CommandError
     from django_snapshots.exceptions import SnapshotNotFoundError
 
     snap_settings = _make_settings(tmp_path)
 
     with override_settings(SNAPSHOTS=snap_settings):
-        with pytest.raises((SnapshotNotFoundError, SystemExit)):
+        with pytest.raises((SnapshotNotFoundError, SystemExit, CommandError)):
             call_command("snapshots", "info", "ghost-snap")
 
 
@@ -774,12 +776,13 @@ def test_check_no_name_empty_storage_raises(tmp_path):
 
 @pytest.mark.django_db(transaction=True)
 def test_check_missing_snapshot_raises(tmp_path):
-    """check for a non-existent snapshot raises SnapshotNotFoundError."""
+    """check for a non-existent snapshot raises an error."""
     from django.core.management import call_command
+    from django.core.management.base import CommandError
     from django_snapshots.exceptions import SnapshotNotFoundError
 
     snap_settings = _make_settings(tmp_path)
 
     with override_settings(SNAPSHOTS=snap_settings):
-        with pytest.raises((SnapshotNotFoundError, SystemExit)):
+        with pytest.raises((SnapshotNotFoundError, SystemExit, CommandError)):
             call_command("snapshots", "check", "ghost-snap")
