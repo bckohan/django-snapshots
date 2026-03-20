@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import shutil
 import sys
@@ -324,7 +325,7 @@ def restore_finalize(
             tasks: list[Awaitable[Any]] = []
             for imp, filename in pairs:
                 src = cmd._restore_temp_dir / filename
-                if asyncio.iscoroutinefunction(imp.restore):
+                if inspect.iscoroutinefunction(imp.restore):
                     tasks.append(imp.restore(src))
                 else:
                     tasks.append(loop.run_in_executor(None, imp.restore, src))

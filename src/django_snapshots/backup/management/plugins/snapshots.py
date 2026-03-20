@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import importlib
+import inspect
 import json
 import shutil
 import socket
@@ -192,7 +193,7 @@ def backup_finalize(
             tasks: list[Awaitable[Any]] = []
             for exp in exporters:
                 dest = cmd._backup_temp_dir / exp.filename
-                if asyncio.iscoroutinefunction(exp.generate):
+                if inspect.iscoroutinefunction(exp.generate):
                     tasks.append(exp.generate(dest))
                 else:
                     tasks.append(loop.run_in_executor(None, exp.generate, dest))

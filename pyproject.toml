@@ -178,6 +178,9 @@ addopts = [
     "--cov-branch",
     "--cov-report=term-missing:skip-covered",
 ]
+filterwarnings = [
+    "ignore:In Typer, only the parameter 'autocompletion' is supported.*:DeprecationWarning",
+]
 
 [tool.coverage.run]
 branch = true
