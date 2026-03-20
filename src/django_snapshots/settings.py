@@ -15,9 +15,10 @@ Both are normalised to a SnapshotSettings instance in AppConfig.ready().
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, TypeVar
 
 from dateutil.relativedelta import relativedelta
 from django.core.exceptions import ImproperlyConfigured
@@ -92,6 +93,8 @@ def relativedelta_to_iso8601(rd: relativedelta) -> str:
 # ---------------------------------------------------------------------------
 # ConfigBase protocol
 # ---------------------------------------------------------------------------
+
+CB = TypeVar("CB", bound="ConfigBase")
 
 
 class ConfigBase(Protocol):
@@ -180,8 +183,40 @@ class PruneConfig(ConfigBase):
         }
 
 
+def ConfigSingleton(config_key: str):
+    from django.core.signals import setting_changed
+
+    class _ConfigSingleton(type(ConfigBase)):  # type: ignore[misc]
+        _instance: Any | None = None
+        _initializing = False
+        _lock = threading.RLock()
+        _config_key = config_key
+
+        def __call__(cls: type[CB], *args, **kwargs):
+            with _ConfigSingleton._lock:
+                if _ConfigSingleton._instance is None:
+                    if not args and not kwargs and not _ConfigSingleton._initializing:
+                        from django.conf import settings
+
+                        _ConfigSingleton._initializing = True
+                        _ConfigSingleton._instance = cls.coerce(
+                            getattr(settings, _ConfigSingleton._config_key, {})
+                        )
+                    else:
+                        _ConfigSingleton._instance = super().__call__(*args, **kwargs)
+                return _ConfigSingleton._instance
+
+        @classmethod
+        def clear(cls, setting, **_):
+            if setting == cls._config_key:
+                cls._instance = None
+
+    setting_changed.connect(_ConfigSingleton.clear)
+    return _ConfigSingleton
+
+
 @dataclass
-class SnapshotSettings(ConfigBase):
+class SnapshotSettings(ConfigBase, metaclass=ConfigSingleton("SNAPSHOTS")):  # type: ignore
     """Top-level django-snapshots configuration.
 
     Set as the SNAPSHOTS Django setting. Accepts either a plain dict or a

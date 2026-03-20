@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 import typer
-from django.conf import settings as django_settings
 from django.utils.translation import gettext_lazy as _
 from django_typer.management import TyperCommand, command
 
@@ -34,7 +33,7 @@ class Command(TyperCommand):
 
     @property
     def settings(self) -> SnapshotSettings:
-        return SnapshotSettings.coerce(getattr(django_settings, "SNAPSHOTS", {}))
+        return SnapshotSettings()
 
     @command(help=str(_("List snapshots in storage")))
     def list(

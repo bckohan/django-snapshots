@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-try:
-    from enum import StrEnum
-except ImportError:  # Python < 3.11
-    from enum import Enum
+from enum import Enum
 
-    class StrEnum(str, Enum):  # type: ignore[no-redef]
-        pass
+
+# todo switch to enum.StrEnum when dropping Python 3.10 support
+class StrEnum(str, Enum):
+    def __str__(self):
+        return str(self.value)
 
 
 class SnapshotFormat(StrEnum):
