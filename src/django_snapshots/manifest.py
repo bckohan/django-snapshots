@@ -13,8 +13,9 @@ import io
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
+from django_snapshots.defines import SnapshotFormat
 from django_snapshots.exceptions import SnapshotNotFoundError, SnapshotVersionError
 from django_snapshots.settings import ConfigBase
 
@@ -115,10 +116,10 @@ class Snapshot(ConfigBase):
         cls,
         storage: SnapshotStorage,
         name: str,
-        snapshot_format: Literal["directory", "archive"] = "directory",
+        snapshot_format: SnapshotFormat = SnapshotFormat.DIRECTORY,
     ) -> Snapshot:
         """Read and parse manifest.json from *storage* for the named snapshot."""
-        if snapshot_format != "directory":
+        if snapshot_format != SnapshotFormat.DIRECTORY:
             raise NotImplementedError(
                 "archive format support is planned for a future release"
             )
@@ -134,10 +135,10 @@ class Snapshot(ConfigBase):
     def to_storage(
         self,
         storage: SnapshotStorage,
-        snapshot_format: Literal["directory", "archive"] = "directory",
+        snapshot_format: SnapshotFormat = SnapshotFormat.DIRECTORY,
     ) -> None:
         """Serialise and write manifest.json to *storage*."""
-        if snapshot_format != "directory":
+        if snapshot_format != SnapshotFormat.DIRECTORY:
             raise NotImplementedError(
                 "archive format support is planned for a future release"
             )

@@ -23,6 +23,8 @@ from dateutil.relativedelta import relativedelta
 from django.core.exceptions import ImproperlyConfigured
 from typing_extensions import Self
 
+from django_snapshots.defines import SnapshotFormat
+
 # ---------------------------------------------------------------------------
 # ISO 8601 duration helpers
 # ---------------------------------------------------------------------------
@@ -190,7 +192,7 @@ class SnapshotSettings(ConfigBase):
     storage: Any = None
     """Storage backend instance or dict config. Required for actual use."""
 
-    snapshot_format: str = "directory"
+    snapshot_format: SnapshotFormat = SnapshotFormat.DIRECTORY
     """Snapshot container format: ``"directory"`` (default) or ``"archive"``."""
 
     snapshot_name: str | Callable[[datetime], str] = "{timestamp_utc}"
@@ -208,14 +210,16 @@ class SnapshotSettings(ConfigBase):
     prune: PruneConfig | None = None
     """Default retention policy used by ``snapshots prune`` when no flags are given."""
 
-    _VALID_FORMATS = frozenset({"directory", "archive"})
-
     def __post_init__(self) -> None:
-        if self.snapshot_format not in self._VALID_FORMATS:
-            raise ImproperlyConfigured(
-                f"SNAPSHOTS['snapshot_format'] must be one of {sorted(self._VALID_FORMATS)}, "
-                f"got {self.snapshot_format!r}."
-            )
+        if not isinstance(self.snapshot_format, SnapshotFormat):
+            try:
+                self.snapshot_format = SnapshotFormat(self.snapshot_format)
+            except ValueError:
+                raise ImproperlyConfigured(
+                    f"SNAPSHOTS['snapshot_format'] must be one of "
+                    f"{[f.value for f in SnapshotFormat]}, "
+                    f"got {self.snapshot_format!r}."
+                )
         if not self.snapshot_name:
             raise ImproperlyConfigured(
                 "SNAPSHOTS['snapshot_name'] must be a non-empty string or callable."

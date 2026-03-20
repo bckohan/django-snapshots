@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 
 import typer
 from django.conf import settings as django_settings
@@ -16,6 +16,7 @@ from django.utils.translation import gettext_lazy as _
 from django_typer.management import TyperCommand, command
 
 from django_snapshots._pip import _pip_freeze
+from django_snapshots.defines import InfoFormat, ListFormat
 from django_snapshots.exceptions import SnapshotNotFoundError
 from django_snapshots.manifest import Snapshot
 from django_snapshots.settings import SnapshotSettings, parse_iso8601_duration
@@ -39,23 +40,23 @@ class Command(TyperCommand):
     def list(
         self,
         fmt: Annotated[
-            Literal["table", "json", "yaml"],
+            ListFormat,
             typer.Option(
                 "--format",
                 "-f",
                 help=str(_("Output format: table (default), json, yaml")),
             ),
-        ] = "table",
+        ] = ListFormat.TABLE,
     ) -> None:
         snapshots = list_snapshots(self.settings.storage)
 
-        if fmt == "json":
+        if fmt == ListFormat.JSON:
             self.echo(
                 json.dumps([s.to_dict() for s in snapshots], indent=2, default=str)
             )
             return
 
-        if fmt == "yaml":
+        if fmt == ListFormat.YAML:
             try:
                 import yaml  # type: ignore[import-untyped]
             except ImportError:
@@ -144,17 +145,17 @@ class Command(TyperCommand):
         self,
         name: Annotated[str, typer.Argument(help=str(_("Snapshot name")))],
         fmt: Annotated[
-            Literal["table", "json"],
+            InfoFormat,
             typer.Option(
                 "--format",
                 "-f",
                 help=str(_("Output format: table (default), json")),
             ),
-        ] = "table",
+        ] = InfoFormat.TABLE,
     ) -> None:
         snapshot = Snapshot.from_storage(self.settings.storage, name)
 
-        if fmt == "json":
+        if fmt == InfoFormat.JSON:
             self.echo(json.dumps(snapshot.to_dict(), indent=2, default=str))
             return
 
