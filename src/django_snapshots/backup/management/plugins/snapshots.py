@@ -11,9 +11,10 @@ import shutil
 import socket
 import sys
 import tempfile
-from datetime import datetime, timezone
+from collections.abc import Awaitable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Awaitable, Optional, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import django
 import typer
@@ -70,7 +71,7 @@ def backup(
     self,
     ctx: typer.Context,
     name: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(help=str(_("Snapshot name (default: UTC timestamp)"))),
     ] = None,
     overwrite: Annotated[
@@ -85,14 +86,14 @@ def backup(
     cmd._backup_storage = cmd.settings.storage
     cmd._backup_overwrite = overwrite
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cmd._backup_created_at = now
     cmd._backup_name = name or now.strftime("%Y-%m-%dT%H-%M-%S-UTC")
     cmd._backup_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_backup_"))
 
     if not ctx.invoked_subcommand:
         all_results: list[AnyArtifactExporter] = []
-        for _, child in cmd.get_subcommand("backup").children.items():
+        for child in cmd.get_subcommand("backup").children.values():
             result = child()
             if result is None:
                 continue
@@ -114,11 +115,11 @@ def backup(
 def database(
     self,
     databases: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option("--databases", help=str(_("DB aliases to export (default: all)"))),
     ] = None,
     connector: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--connector",
             help=str(_("Dotted path to connector class (overrides auto-detect)")),
@@ -141,7 +142,7 @@ def database(
 def media(
     self,
     media_root: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--media-root",
             help=str(_("Override MEDIA_ROOT path")),
@@ -168,7 +169,7 @@ def environment(
 def backup_finalize(
     self,
     results: list[AnyArtifactExporter | list[AnyArtifactExporter]],
-) -> None:  # noqa: ARG001
+) -> None:
     """Check for collision, generate artifacts, compute checksums, write manifest."""
     cmd = cast(_BackupCommand, self)
     try:
@@ -214,7 +215,7 @@ def backup_finalize(
                     filename=exp.filename,
                     size=dest.stat().st_size,
                     checksum=f"sha256:{checksum}",
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                     metadata=dict(exp.metadata),
                 )
             )

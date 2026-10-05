@@ -6,7 +6,7 @@
 [![PyPI djversions](https://img.shields.io/pypi/djversions/django-snapshots.svg)](https://pypi.org/project/django-snapshots/)
 [![PyPI status](https://img.shields.io/pypi/status/django-snapshots.svg)](https://pypi.python.org/pypi/django-snapshots)
 [![Documentation Status](https://readthedocs.org/projects/django-snapshots/badge/?version=latest)](http://django-snapshots.readthedocs.io/?badge=latest/)
-[![Code Cov](https://codecov.io/gh/bckohan/django-snapshots/branch/main/graph/badge.svg?token=0IZOKN2DYL)](https://codecov.io/gh/bckohan/django-snapshots)
+[![Code Cov](https://codecov.io/gh/bckohan/django-snapshots/branch/main/graph/badge.svg)](https://codecov.io/gh/bckohan/django-snapshots)
 [![Test Status](https://github.com/bckohan/django-snapshots/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/bckohan/django-snapshots/actions/workflows/test.yml?query=branch:main)
 [![Lint Status](https://github.com/bckohan/django-snapshots/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/bckohan/django-snapshots/actions/workflows/lint.yml?query=branch:main)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/bckohan/django-snapshots/badge)](https://securityscorecards.dev/viewer/?uri=github.com/bckohan/django-snapshots)

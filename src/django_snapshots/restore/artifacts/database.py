@@ -13,6 +13,12 @@ from typing import ClassVar
 from django_snapshots.connectors.auto import get_connector_for_alias
 
 
+def _decompress(src: Path, dest: Path) -> None:
+    """Decompress the gzip file *src* to *dest*."""
+    with gzip.open(src, "rb") as f_in, open(dest, "wb") as f_out:
+        shutil.copyfileobj(f_in, f_out)
+
+
 @dataclass
 class DatabaseArtifactImporter:
     """Restore one database alias from a gzip-compressed SQL dump.
@@ -37,8 +43,7 @@ class DatabaseArtifactImporter:
         with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
             tmp_path = Path(tmp.name)
         try:
-            with gzip.open(src, "rb") as f_in, open(tmp_path, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
+            await loop.run_in_executor(None, _decompress, src, tmp_path)
             await loop.run_in_executor(
                 None, self._connector.restore, self.db_alias, tmp_path
             )

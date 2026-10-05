@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
-
-
-# todo switch to enum.StrEnum when dropping Python 3.10 support
-class StrEnum(str, Enum):
-    def __str__(self):
-        return str(self.value)
+from enum import StrEnum
 
 
 class SnapshotFormat(StrEnum):

@@ -1,17 +1,17 @@
-"""Click parameter types (parsers) for django-snapshots CLI arguments."""
+"""Parameter types (parsers) for django-snapshots CLI arguments."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import click
+from django_typer.parsers import Context, Parameter, ParamType
 
 if TYPE_CHECKING:
     from django_snapshots.manifest import Snapshot
 
 
-class SnapshotNameType(click.ParamType):
-    """Click parameter type that resolves a snapshot name to a
+class SnapshotNameType(ParamType):
+    """Parameter type that resolves a snapshot name to a
     :class:`~django_snapshots.manifest.Snapshot` instance.
 
     Reads the manifest from the configured storage backend; fails with a
@@ -23,8 +23,8 @@ class SnapshotNameType(click.ParamType):
     def convert(
         self,
         value: Any,
-        param: click.Parameter | None = None,
-        ctx: click.Context | None = None,
+        param: Parameter | None = None,
+        ctx: Context | None = None,
     ) -> Snapshot:
         from django_snapshots.exceptions import SnapshotNotFoundError
         from django_snapshots.manifest import Snapshot

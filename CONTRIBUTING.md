@@ -16,7 +16,7 @@ We provide a platform independent justfile with recipes for all the development 
 just setup <python version>
 ```
 
-**This will also install prek** If you wish to submit code that does not pass pre-commit checks you can disable prek by running:
+**This will also install prek** If you wish to submit code that does not pass pre-commit checks you can disable [prek](https://prek.j178.dev) by running:
 
 ```sh
 just run prek uninstall

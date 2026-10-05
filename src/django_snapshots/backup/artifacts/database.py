@@ -13,6 +13,12 @@ from typing import Any, ClassVar
 from django_snapshots.connectors.auto import get_connector_for_alias
 
 
+def _compress(src: Path, dest: Path) -> None:
+    """Gzip-compress *src* to *dest*."""
+    with open(src, "rb") as f_in, gzip.open(dest, "wb") as f_out:
+        shutil.copyfileobj(f_in, f_out)
+
+
 @dataclass
 class DatabaseArtifactExporter:
     """Export one database alias as a gzip-compressed SQL dump.
@@ -51,7 +57,6 @@ class DatabaseArtifactExporter:
                 None, self._connector.dump, self.db_alias, tmp_path
             )
             dest.parent.mkdir(parents=True, exist_ok=True)
-            with open(tmp_path, "rb") as f_in, gzip.open(dest, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
+            await loop.run_in_executor(None, _compress, tmp_path, dest)
         finally:
             tmp_path.unlink(missing_ok=True)

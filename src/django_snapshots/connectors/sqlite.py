@@ -34,8 +34,7 @@ class SQLiteConnector:
         try:
             con = self._connect(db_path)
             with open(dest, "w", encoding="utf-8") as f:
-                for line in con.iterdump():
-                    f.write(f"{line}\n")
+                f.writelines(f"{line}\n" for line in con.iterdump())
             con.close()
         except Exception as exc:
             raise SnapshotConnectorError(
@@ -51,7 +50,7 @@ class SQLiteConnector:
             # Close Django's connection before acquiring our own — on Windows,
             # SQLite's exclusive write lock prevents a second connection from
             # opening the file while Django's handle is still open.
-            from django.db import connections  # noqa: PLC0415
+            from django.db import connections
 
             connections[db_alias].close()
             con = self._connect(db_path)

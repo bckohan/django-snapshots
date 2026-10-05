@@ -9,8 +9,9 @@ import json
 import shutil
 import sys
 import tempfile
+from collections.abc import Awaitable
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Awaitable, List, Optional, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import typer
 from asyncer import syncify
@@ -79,7 +80,7 @@ def _resolve_latest(storage) -> str:
 
 
 def _create_database_importers(
-    snapshot: Snapshot, databases: Optional[list[str]] = None
+    snapshot: Snapshot, databases: list[str] | None = None
 ) -> list[DatabaseArtifactImporter]:
     manifest_aliases = {
         a.metadata.get("database")
@@ -107,10 +108,10 @@ def restore(
     self,
     ctx: typer.Context,
     name: Annotated[
-        Optional[Snapshot],
+        Snapshot | None,
         typer.Option(
             help=str(_("Snapshot name (default: latest)")),
-            click_type=SNAPSHOT,
+            parser=SNAPSHOT,
             shell_complete=snapshot_names,
         ),
     ] = None,
@@ -139,7 +140,7 @@ def restore(
 
     if not ctx.invoked_subcommand:
         all_results: list[AnyArtifactImporter] = []
-        for _, child in cmd.get_subcommand("restore").children.items():
+        for child in cmd.get_subcommand("restore").children.values():
             result = child()
             if result is None:
                 continue
@@ -160,7 +161,7 @@ def restore(
 def database(
     self,
     databases: Annotated[
-        Optional[List[str]],
+        list[str] | None,
         typer.Option(
             "--databases",
             help=str(_("DB aliases to restore (default: all in snapshot)")),
@@ -179,7 +180,7 @@ def database(
 def media(
     self,
     media_root: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT restore path"))),
     ] = None,
     merge: Annotated[

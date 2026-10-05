@@ -40,7 +40,7 @@ django-snapshots
         :target: http://django-snapshots.readthedocs.io/?badge=latest/
         :alt: Documentation Status
 
-    .. image:: https://codecov.io/gh/bckohan/django-snapshots/branch/main/graph/badge.svg?token=0IZOKN2DYL
+    .. image:: https://codecov.io/gh/bckohan/django-snapshots/branch/main/graph/badge.svg
         :target: https://codecov.io/gh/bckohan/django-snapshots
         :alt: Code Coverage
 

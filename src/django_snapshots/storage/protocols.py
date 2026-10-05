@@ -12,7 +12,8 @@ Third-party backends use structural subtyping — no inheritance required.
 
 from __future__ import annotations
 
-from typing import IO, Iterator, Protocol, runtime_checkable
+from collections.abc import Iterator
+from typing import IO, Protocol, runtime_checkable
 
 from django_snapshots.exceptions import SnapshotStorageCapabilityError
 

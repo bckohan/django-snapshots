@@ -7,8 +7,8 @@ django-typer's plugin system (see their AppConfig.ready() methods).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Annotated, Optional
+from datetime import UTC, datetime
+from typing import Annotated
 
 import typer
 from django.utils.translation import gettext_lazy as _
@@ -99,10 +99,10 @@ class Command(TyperCommand):
     def delete(
         self,
         name: Annotated[
-            Optional[Snapshot],
+            Snapshot | None,
             typer.Argument(
                 help=str(_("Snapshot name")),
-                click_type=SNAPSHOT,
+                parser=SNAPSHOT,
                 shell_complete=snapshot_names,
             ),
         ] = None,
@@ -150,7 +150,7 @@ class Command(TyperCommand):
             Snapshot,
             typer.Argument(
                 help=str(_("Snapshot name")),
-                click_type=SNAPSHOT,
+                parser=SNAPSHOT,
                 shell_complete=snapshot_names,
             ),
         ],
@@ -199,11 +199,11 @@ class Command(TyperCommand):
     def prune(
         self,
         keep: Annotated[
-            Optional[int],
+            int | None,
             typer.Option("--keep", help=str(_("Keep the N most recent snapshots"))),
         ] = None,
         duration: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(
                 "--duration",
                 help=str(
@@ -212,7 +212,7 @@ class Command(TyperCommand):
             ),
         ] = None,
         max_size: Annotated[
-            Optional[int],
+            int | None,
             typer.Option(
                 "--max-size",
                 help=str(_("Maximum total bytes to retain (at least one always kept)")),
@@ -241,9 +241,7 @@ class Command(TyperCommand):
 
         # Compute the cutoff datetime once at command start
         cutoff = (
-            datetime.now(timezone.utc) - parsed_duration
-            if parsed_duration is not None
-            else None
+            datetime.now(UTC) - parsed_duration if parsed_duration is not None else None
         )
 
         snapshots = list_snapshots(storage)
@@ -272,10 +270,10 @@ class Command(TyperCommand):
     def check_env(
         self,
         name: Annotated[
-            Optional[Snapshot],
+            Snapshot | None,
             typer.Argument(
                 help=str(_("Snapshot name (default: latest)")),
-                click_type=SNAPSHOT,
+                parser=SNAPSHOT,
                 shell_complete=snapshot_names,
             ),
         ] = None,

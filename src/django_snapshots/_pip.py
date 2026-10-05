@@ -20,6 +20,7 @@ def _pip_freeze() -> list[str]:
         [sys.executable, "-m", "pip", "freeze"],
         capture_output=True,
         text=True,
+        check=False,
     )
     if result.returncode == 0:
         return [line for line in result.stdout.splitlines() if line.strip()]

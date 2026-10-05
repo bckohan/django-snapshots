@@ -45,6 +45,6 @@ class EnvironmentArtifactImporter:
                 print("\n".join(diff))
             else:
                 print("Environment matches snapshot requirements.")
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110
             # Never let environment comparison block or fail the import
             pass

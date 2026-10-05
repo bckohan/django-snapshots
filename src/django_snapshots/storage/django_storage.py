@@ -59,7 +59,7 @@ class DjangoStorageBackend:
         """Recursively collect paths matching prefix using Storage.listdir()."""
         try:
             dirs, files = self._storage.listdir(current_dir or ".")
-        except Exception:
+        except Exception:  # noqa: BLE001
             return
         for filename in files:
             rel = f"{current_dir}/{filename}".lstrip("/") if current_dir else filename

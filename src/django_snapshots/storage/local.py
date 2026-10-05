@@ -9,8 +9,9 @@ from __future__ import annotations
 import builtins
 import os
 import shutil
+from collections.abc import Iterator
 from pathlib import Path
-from typing import IO, Iterator
+from typing import IO
 
 CHUNK_SIZE = 256 * 1024  # 256 KB
 
@@ -75,8 +76,7 @@ class LocalFileSystemBackend:
         dest = self._abs(path)
         dest.parent.mkdir(parents=True, exist_ok=True)
         with open(dest, "wb") as f:
-            for chunk in chunks:
-                f.write(chunk)
+            f.writelines(chunks)
 
     def atomic_move(self, src: str, dst: str) -> None:
         src_path = self._abs(src)

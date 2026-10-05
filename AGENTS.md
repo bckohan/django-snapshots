@@ -27,7 +27,7 @@ just test-all --group dj52 --group psycopg3   # with PostgreSQL backend
 just coverage                          # combine and report coverage
 ```
 
-`just test` uses the project venv with `--no-sync` for speed. `just test-all` runs in a fully isolated environment and accepts any `uv run` flags (e.g. `-p 3.12 --group dj42`).
+`just test` uses the project venv with `--no-sync` for speed. `just test-all` runs in a fully isolated environment and accepts any `uv run` flags (e.g. `-p 3.12 --group dj52`).
 
 ### Linting / Formatting
 ```bash
@@ -69,15 +69,15 @@ just release 1.2.3   # validates version, tags, and pushes tag to GitHub
 
 Django version and database clients are selected at test-run time via `uv` dependency groups — no lock-file pinning:
 
-- Django version groups (mutually exclusive): `dj42`, `dj52`, `dj60`
+- Django version groups (mutually exclusive): `dj52`, `dj61`
 - PostgreSQL: `psycopg2`, `psycopg3` (mutually exclusive)
 - MySQL/MariaDB: `mysqlclient14`, `mysqlclient2x` (mutually exclusive)
-- Oracle: `cx_oracle`, `oracledb` (mutually exclusive)
+- Oracle: `oracledb`
 
 CI passes these as `--group` flags to `just test-all`:
 ```bash
 just test-all --group psycopg3 -p "3.12" --group dj52
-just test-all -p "3.11" --group dj42    # SQLite (no DB client group)
+just test-all -p "3.11" --group dj52    # SQLite (no DB client group)
 ```
 
 ## Project Structure

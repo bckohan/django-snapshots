@@ -7,9 +7,9 @@ from django_snapshots.storage.protocols import (
 )
 
 __all__ = [
-    "SnapshotStorage",
     "AdvancedSnapshotStorage",
-    "requires_advanced_storage",
-    "LocalFileSystemBackend",
     "DjangoStorageBackend",
+    "LocalFileSystemBackend",
+    "SnapshotStorage",
+    "requires_advanced_storage",
 ]

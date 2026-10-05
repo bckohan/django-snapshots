@@ -27,7 +27,7 @@ def list_snapshots(storage) -> list[Snapshot]:
         try:
             snap = Snapshot.from_storage(storage, name)
             snapshots.append(snap)
-        except Exception:  # noqa: BLE001  # nosec B112
+        except Exception:  # noqa: BLE001, S112  # nosec B112
             continue
 
     snapshots.sort(key=lambda s: s.created_at, reverse=True)

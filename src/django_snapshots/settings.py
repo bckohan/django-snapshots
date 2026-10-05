@@ -17,13 +17,13 @@ from __future__ import annotations
 import os
 import re
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Protocol, TypeVar
+from typing import Any, Protocol, Self, TypeVar
 
 from dateutil.relativedelta import relativedelta
 from django.core.exceptions import ImproperlyConfigured
-from typing_extensions import Self
 
 from django_snapshots.defines import SnapshotFormat
 

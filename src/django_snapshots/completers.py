@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import click
-from click.shell_completion import CompletionItem
+from django_typer.completers import CompletionItem, Context, Parameter
 
 
 def snapshot_names(
-    ctx: click.Context,
-    param: click.Parameter,
+    ctx: Context,
+    param: Parameter,
     incomplete: str,
 ) -> list[CompletionItem] | list[str]:
     """Return snapshot names from storage that start with *incomplete*."""

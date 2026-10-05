@@ -4,6 +4,6 @@ from django_snapshots.backup.artifacts.media import MediaArtifactExporter
 
 __all__ = [
     "DatabaseArtifactExporter",
-    "MediaArtifactExporter",
     "EnvironmentArtifactExporter",
+    "MediaArtifactExporter",
 ]

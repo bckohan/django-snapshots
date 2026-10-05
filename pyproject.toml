@@ -2,7 +2,7 @@
 name = "django-snapshots"
 version = "0.0.0a0"
 description = "A generic and pluggable backup and restore management utility for Django."
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.11,<4.0"
 authors = [
   {name = "Brian Kohan", email = "bckohan@gmail.com"},
 ]
@@ -14,10 +14,10 @@ repository = "https://github.com/bckohan/django-snapshots"
 homepage = "https://django-snapshots.readthedocs.io"
 keywords = ["django"]
 dependencies = [
-    "asyncer>=0.0.8",
-    "django>=4.2,<6.1",
-    "django-typer>=3.7.0",
-    "tqdm>=4.0.0",
+    "asyncer>=0.0.11",
+    "django>=5.2,<6.2",
+    "django-typer>=4.0.0",
+    "tqdm>=4.62.0",
     "typing_extensions>=4.0.0",
     "python-dateutil>=2.8.0",
 ]
@@ -27,19 +27,19 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Development Status :: 1 - Planning",
-    "Framework :: Django :: 4.2",
     "Framework :: Django :: 5.2",
     "Framework :: Django :: 6.0",
+    "Framework :: Django :: 6.1",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
 
     "Natural Language :: English",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Internet :: WWW/HTTP :: Site Management",
     "Topic :: Software Development :: Libraries",
@@ -54,9 +54,8 @@ build-backend = "hatchling.build"
 package = true
 conflicts = [
   [
-    { group = "dj42" },
     { group = "dj52" },
-    { group = "dj60" },
+    { group = "dj61" },
   ],
   [
     { group = "mysqlclient2x" },
@@ -65,10 +64,6 @@ conflicts = [
   [
     { group = "psycopg2" },
     { group = "psycopg3" },
-  ],
-  [
-    { group = "cx_oracle" },
-    { group = "oracledb" },
   ],
 ]
 
@@ -93,17 +88,15 @@ docs = [
     "sphinx-autobuild>=2024.10.3",
     "sphinx-tabs>=3.4.7",
     "sphinxcontrib-django>=2.5",
-    "sphinxcontrib-typer[pdf,html]>=0.8.0",
+    "sphinxcontrib-typer[pdf,html]>=0.10.0",
 ]
 psycopg2      = ["psycopg2>=2.9.10"]
 psycopg3      = ["psycopg"]
 mysqlclient14 = ["mysqlclient==1.4.3"]
 mysqlclient2x = ["mysqlclient>=2.2.8"]
-cx_oracle     = ["cx-oracle>=8.3.0"]
 oracledb      = ["oracledb>=2.3.0"]
-dj42          = ["Django~=4.2; python_version < '3.13'"]
-dj52          = ["Django~=5.2"]
-dj60          = ["Django~=6.0; python_version >= '3.12'"]
+dj52          = ["Django>=5.2,<6.0"]
+dj61          = ["Django>=6.1,<6.2; python_version >= '3.12'"]
 typing = [
     "pyright>=1.1.390",
     "mypy>=1.19.1",
@@ -150,7 +143,7 @@ packages = ["django_snapshots"]
 django_settings_module = "tests.settings"
 
 [tool.pyright]
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 typeCheckingMode = "basic"
 include = ["src/django_snapshots"]
 reportMissingImports = true
@@ -196,7 +189,7 @@ source = ["django_snapshots"]
 [tool.ruff]
 line-length = 88
 exclude = ["doc", "dist"]
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 exclude = ["tests/**/*"]

@@ -10,10 +10,10 @@ from django_snapshots.connectors.sqlite import SQLiteConnector
 
 __all__ = [
     "DatabaseConnector",
+    "DjangoDumpDataConnector",
+    "MySQLConnector",
+    "PostgresConnector",
+    "SQLiteConnector",
     "get_connector_class",
     "get_connector_for_alias",
-    "SQLiteConnector",
-    "PostgresConnector",
-    "MySQLConnector",
-    "DjangoDumpDataConnector",
 ]

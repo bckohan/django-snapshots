@@ -67,7 +67,7 @@ from django_snapshots.storage import (
     SnapshotStorage,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by category
     # Metadata
     "__title__",
     "__version__",
