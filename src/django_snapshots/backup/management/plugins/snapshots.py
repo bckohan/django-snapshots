@@ -20,6 +20,7 @@ import django
 import typer
 from asyncer import syncify
 from django.conf import settings as django_settings
+from django.core.management import CommandError
 from django.utils.translation import gettext_lazy as _
 from django_typer.completers.path import directories
 from tqdm.asyncio import tqdm as async_tqdm
@@ -31,9 +32,17 @@ from django_snapshots.backup.artifacts.environment import (
     _pip_freeze,
 )
 from django_snapshots.backup.artifacts.media import MediaArtifactExporter
+from django_snapshots.containers import (
+    MANIFEST,
+    snapshot_exists,
+    validate_name,
+    write_snapshot,
+)
+from django_snapshots.defines import SnapshotFormat
 from django_snapshots.exceptions import SnapshotExistsError
 from django_snapshots.management.commands.snapshots import Command as SnapshotsCommand
 from django_snapshots.manifest import ArtifactRecord, Snapshot
+from django_snapshots.utils import _check_storage_outside
 
 if TYPE_CHECKING:
     from django_snapshots.storage.protocols import SnapshotStorage
@@ -44,6 +53,7 @@ class _BackupCommand(SnapshotsCommand):
     _backup_overwrite: bool
     _backup_created_at: datetime
     _backup_name: str
+    _backup_format: SnapshotFormat
     _backup_temp_dir: Path
 
 
@@ -65,14 +75,16 @@ def _sha256(path: Path) -> str:
     name="backup",
     invoke_without_command=True,
     chain=True,
-    help=_("Backup a snapshot"),
+    help=_("Create a snapshot"),
 )
 def backup(
     self,
     ctx: typer.Context,
     name: Annotated[
         str | None,
-        typer.Option(help=str(_("Snapshot name (default: UTC timestamp)"))),
+        typer.Option(
+            help=str(_("Snapshot name (default: from the snapshot_name setting)"))
+        ),
     ] = None,
     overwrite: Annotated[
         bool,
@@ -80,15 +92,26 @@ def backup(
             "--overwrite", help=str(_("Overwrite if snapshot already exists"))
         ),
     ] = False,
+    snapshot_format: Annotated[
+        SnapshotFormat | None,
+        typer.Option(
+            "--format",
+            help=str(_("Storage format (default: from the snapshot_format setting)")),
+        ),
+    ] = None,
 ) -> list[AnyArtifactExporter] | None:
     """Initialise backup state (runs before any subcommand)."""
     cmd = cast(_BackupCommand, self)
     cmd._backup_storage = cmd.settings.storage
     cmd._backup_overwrite = overwrite
+    cmd._backup_format = snapshot_format or cmd.settings.snapshot_format
 
     now = datetime.now(UTC)
     cmd._backup_created_at = now
-    cmd._backup_name = name or now.strftime("%Y-%m-%dT%H-%M-%S-UTC")
+    try:
+        cmd._backup_name = validate_name(name or cmd.settings.render_name(now))
+    except ValueError as err:
+        raise typer.BadParameter(str(err), param_hint="--name") from err
     cmd._backup_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_backup_"))
 
     if not ctx.invoked_subcommand:
@@ -149,8 +172,15 @@ def media(
             shell_complete=directories,
         ),
     ] = None,
-) -> MediaArtifactExporter:
-    return MediaArtifactExporter(directory=media_root or "")
+) -> MediaArtifactExporter | None:
+    directory = media_root or str(django_settings.MEDIA_ROOT or "")
+    if not directory:
+        cast(SnapshotsCommand, self).echo(
+            "MEDIA_ROOT is not set; skipping media.", err=True
+        )
+        return None
+    _check_storage_outside(cast(SnapshotsCommand, self).settings.storage, directory)
+    return MediaArtifactExporter(directory=directory)
 
 
 @backup.command(help=_("Capture the current Python environment (pip freeze)"))
@@ -168,19 +198,32 @@ def environment(
 @backup.finalize()
 def backup_finalize(
     self,
-    results: list[AnyArtifactExporter | list[AnyArtifactExporter]],
+    results: list[AnyArtifactExporter | list[AnyArtifactExporter] | None],
 ) -> None:
     """Check for collision, generate artifacts, compute checksums, write manifest."""
     cmd = cast(_BackupCommand, self)
     try:
-        # flatten the list of exporters (supporting nested lists/tuples)
+        # flatten the list of exporters (supporting nested lists/tuples), dropping
+        # subcommands that had nothing to back up
         exporters: list[AnyArtifactExporter] = [
-            y for x in results for y in (x if isinstance(x, (list, tuple)) else [x])
+            y
+            for x in results
+            for y in (x if isinstance(x, (list, tuple)) else [x])
+            if y is not None
         ]
+        if not exporters:
+            raise CommandError("Nothing to back up.")
+
+        filenames = [exp.filename for exp in exporters]
+        if duplicates := {f for f in filenames if filenames.count(f) > 1}:
+            raise CommandError(
+                f"Multiple artifacts would be written to: {', '.join(sorted(duplicates))}"
+            )
 
         # Check for name collision
-        manifest_path = f"{cmd._backup_name}/manifest.json"
-        if not cmd._backup_overwrite and cmd._backup_storage.exists(manifest_path):
+        if not cmd._backup_overwrite and snapshot_exists(
+            cmd._backup_storage, cmd._backup_name
+        ):
             raise SnapshotExistsError(
                 f"Snapshot {cmd._backup_name!r} already exists. "
                 "Use --overwrite to replace it."
@@ -235,29 +278,21 @@ def backup_finalize(
             metadata=dict(cmd.settings.metadata),
             artifacts=artifact_records,
         )
-        manifest_dest = cmd._backup_temp_dir / "manifest.json"
-        manifest_dest.write_text(
+        (cmd._backup_temp_dir / MANIFEST).write_text(
             json.dumps(snapshot.to_dict(), indent=2),
             encoding="utf-8",
         )
 
         # ------------------------------------------------------------------ #
-        # 4. Upload all files to storage                                      #
+        # 4. Upload to storage — the snapshot only becomes visible once its   #
+        #    manifest is written                                              #
         # ------------------------------------------------------------------ #
-        # Upload each artifact and the manifest to storage.
-        # NOTE: This upload is not atomic. If a write fails partway through,
-        # the storage directory may contain artifact files without a manifest.json,
-        # leaving it in a state that will pass the collision guard on retry.
-        # Full atomic upload support requires a storage backend with transaction semantics.
-        for file_path in sorted(cmd._backup_temp_dir.iterdir()):
-            if file_path.name == "manifest.json":
-                continue
-            with open(file_path, "rb") as f:
-                cmd._backup_storage.write(f"{cmd._backup_name}/{file_path.name}", f)
-
-        # write manifest last so if it's there we know the backup is complete
-        with open(manifest_dest, "rb") as f:
-            cmd._backup_storage.write(f"{cmd._backup_name}/manifest.json", f)
+        write_snapshot(
+            cmd._backup_storage,
+            cmd._backup_name,
+            cmd._backup_temp_dir,
+            cmd._backup_format,
+        )
 
         cmd.echo(f"Snapshot complete: {cmd._backup_name}")
 

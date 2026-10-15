@@ -26,7 +26,10 @@ class SnapshotNameType(ParamType):
         param: Parameter | None = None,
         ctx: Context | None = None,
     ) -> Snapshot:
-        from django_snapshots.exceptions import SnapshotNotFoundError
+        from django_snapshots.exceptions import (
+            SnapshotIntegrityError,
+            SnapshotNotFoundError,
+        )
         from django_snapshots.manifest import Snapshot
         from django_snapshots.settings import SnapshotSettings
 
@@ -34,8 +37,10 @@ class SnapshotNameType(ParamType):
             return value
         try:
             return Snapshot.from_storage(SnapshotSettings().storage, value)
-        except SnapshotNotFoundError:
+        except (SnapshotNotFoundError, ValueError):
             self.fail(f"snapshot {value!r} not found in storage.", param, ctx)
+        except SnapshotIntegrityError as err:
+            self.fail(str(err), param, ctx)
 
 
 SNAPSHOT = SnapshotNameType()

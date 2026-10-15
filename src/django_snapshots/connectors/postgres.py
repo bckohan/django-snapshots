@@ -1,6 +1,11 @@
 """PostgresConnector — uses pg_dump and psql.
 
 Requires ``pg_dump`` and ``psql`` binaries on PATH.
+
+Dumps are plain SQL that drop and recreate every dumped object
+(``--clean --if-exists``), so they can be restored over an existing database.
+Ownership is not dumped, so the restoring role owns the restored objects.
+Restores run in a single transaction and stop at the first error.
 """
 
 from __future__ import annotations
@@ -41,7 +46,11 @@ class PostgresConnector:
         """Dump the PostgreSQL database to *dest* using ``pg_dump``."""
         config = self._db_config(db_alias)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        cmd = ["pg_dump", "--no-password"] + self._base_args(config) + [config["NAME"]]
+        cmd = (
+            ["pg_dump", "--no-password", "--clean", "--if-exists", "--no-owner"]
+            + self._base_args(config)
+            + [config["NAME"]]
+        )
         try:
             with open(dest, "wb") as out:
                 subprocess.run(
@@ -62,7 +71,14 @@ class PostgresConnector:
         """Restore the PostgreSQL database from *src* using ``psql``."""
         config = self._db_config(db_alias)
         cmd = (
-            ["psql", "--no-password"]
+            [
+                "psql",
+                "--no-password",
+                "--quiet",
+                "--single-transaction",
+                "--set",
+                "ON_ERROR_STOP=1",
+            ]
             + self._base_args(config)
             + ["-f", str(src), config["NAME"]]
         )

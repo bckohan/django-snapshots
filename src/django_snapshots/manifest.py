@@ -1,7 +1,8 @@
 """Snapshot and ArtifactRecord dataclasses.
 
-These are the in-memory representation of a snapshot manifest. They
-read/write manifest.json via ``from_storage`` / ``to_storage``.
+These are the in-memory representation of a snapshot manifest. Use
+``Snapshot.from_storage`` to load one; :mod:`django_snapshots.containers`
+handles how snapshots are laid out in storage.
 
 Manifest version history:
   "1" — initial format (django-snapshots v0.1)
@@ -16,7 +17,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from django_snapshots.defines import SnapshotFormat
-from django_snapshots.exceptions import SnapshotNotFoundError, SnapshotVersionError
+from django_snapshots.exceptions import SnapshotVersionError
 from django_snapshots.settings import ConfigBase
 
 if TYPE_CHECKING:
@@ -75,6 +76,8 @@ class Snapshot(ConfigBase):
     """pip freeze output captured at export time, one package per element."""
     metadata: dict[str, Any]
     artifacts: list[ArtifactRecord]
+    format: SnapshotFormat = field(default=SnapshotFormat.DIRECTORY, compare=False)
+    """How the snapshot is stored. Detected on load; not part of the manifest."""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Snapshot:
@@ -112,36 +115,23 @@ class Snapshot(ConfigBase):
         }
 
     @classmethod
-    def from_storage(
-        cls,
-        storage: SnapshotStorage,
-        name: str,
-        snapshot_format: SnapshotFormat = SnapshotFormat.DIRECTORY,
-    ) -> Snapshot:
-        """Read and parse manifest.json from *storage* for the named snapshot."""
-        if snapshot_format != SnapshotFormat.DIRECTORY:
-            raise NotImplementedError(
-                "archive format support is planned for a future release"
-            )
-        manifest_path = f"{name}/manifest.json"
-        if not storage.exists(manifest_path):
-            raise SnapshotNotFoundError(
-                f"Snapshot {name!r} not found in storage (missing {manifest_path!r})."
-            )
-        with storage.read(manifest_path) as f:
-            data = json.load(f)
-        return cls.from_dict(data)
+    def from_storage(cls, storage: SnapshotStorage, name: str) -> Snapshot:
+        """Load the named snapshot's manifest from *storage* (either format).
 
-    def to_storage(
-        self,
-        storage: SnapshotStorage,
-        snapshot_format: SnapshotFormat = SnapshotFormat.DIRECTORY,
-    ) -> None:
-        """Serialise and write manifest.json to *storage*."""
-        if snapshot_format != SnapshotFormat.DIRECTORY:
-            raise NotImplementedError(
-                "archive format support is planned for a future release"
-            )
+        Raises :exc:`~django_snapshots.exceptions.SnapshotNotFoundError` if no
+        such snapshot exists.
+        """
+        from django_snapshots.containers import read_manifest
+
+        return read_manifest(storage, name)
+
+    def to_storage(self, storage: SnapshotStorage) -> None:
+        """Write this manifest as ``<name>/manifest.json`` (directory format).
+
+        Low-level: this writes only the manifest. Use
+        :func:`django_snapshots.containers.write_snapshot` to store a complete
+        snapshot.
+        """
         manifest_path = f"{self.name}/manifest.json"
         data = json.dumps(self.to_dict(), indent=2).encode()
         storage.write(manifest_path, io.BytesIO(data))

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import inspect
-import json
 import shutil
 import sys
 import tempfile
@@ -21,6 +20,7 @@ from tqdm.asyncio import tqdm as async_tqdm
 
 from django_snapshots.artifacts.protocols import AnyArtifactImporter
 from django_snapshots.completers import snapshot_names
+from django_snapshots.containers import fetch_artifacts, list_snapshots
 from django_snapshots.exceptions import (
     SnapshotEncryptionError,
     SnapshotIntegrityError,
@@ -29,6 +29,7 @@ from django_snapshots.exceptions import (
 from django_snapshots.management.commands.snapshots import Command as SnapshotsCommand
 from django_snapshots.manifest import Snapshot
 from django_snapshots.parsers import SNAPSHOT
+from django_snapshots.utils import _check_storage_outside
 
 from ...artifacts.database import DatabaseArtifactImporter
 from ...artifacts.environment import EnvironmentArtifactImporter
@@ -52,31 +53,6 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-def _resolve_latest(storage) -> str:
-    all_paths = storage.list("")
-    prefixes: dict[str, list[str]] = {}
-    for path in all_paths:
-        parts = path.split("/", 1)
-        if parts:
-            prefixes.setdefault(parts[0], []).append(path)
-
-    candidates = [
-        prefix
-        for prefix, paths in prefixes.items()
-        if any(p.endswith("/manifest.json") for p in paths)
-    ]
-    if not candidates:
-        raise SnapshotNotFoundError("No snapshots found in storage.")
-
-    snapshots: list[tuple[str, str]] = []
-    for name in candidates:
-        with storage.read(f"{name}/manifest.json") as f:
-            data = json.load(f)
-        snapshots.append((data["created_at"], name))
-    snapshots.sort(reverse=True)
-    return snapshots[0][1]
 
 
 def _create_database_importers(
@@ -119,35 +95,27 @@ def restore(
     """Initialise restore state and load manifest (runs before any subcommand)."""
     cmd = cast(_RestoreCommand, self)
     cmd._restore_storage = cmd.settings.storage
+    if name is None:
+        snapshots = list_snapshots(cmd._restore_storage)
+        if not snapshots:
+            raise SnapshotNotFoundError("No snapshots found in storage.")
+        name = snapshots[0]
+    cmd._restore_snapshot = name
+    cmd._restore_name = name.name
     cmd._restore_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_restore_"))
-    try:
-        if name is not None:
-            cmd._restore_snapshot = name
-            cmd._restore_name = name.name
-        else:
-            resolved_name = _resolve_latest(cmd._restore_storage)
-            if not cmd._restore_storage.exists(f"{resolved_name}/manifest.json"):
-                raise SnapshotNotFoundError(
-                    f"Snapshot {resolved_name!r} not found in storage "
-                    f"(missing '{resolved_name}/manifest.json')."
-                )
-            with cmd._restore_storage.read(f"{resolved_name}/manifest.json") as f:
-                cmd._restore_snapshot = Snapshot.from_dict(json.load(f))
-            cmd._restore_name = resolved_name
-    except Exception:
-        shutil.rmtree(cmd._restore_temp_dir, ignore_errors=True)
-        raise
 
     if not ctx.invoked_subcommand:
+        # restore everything the snapshot contains; artifacts it doesn't
+        # contain are only worth a warning when explicitly requested
+        in_snapshot = {a.filename for a in name.artifacts}
         all_results: list[AnyArtifactImporter] = []
         for child in cmd.get_subcommand("restore").children.values():
             result = child()
             if result is None:
                 continue
-            if isinstance(result, list):
-                all_results.extend(result)
-            else:
-                all_results.append(result)
+            for imp in result if isinstance(result, (list, tuple)) else [result]:
+                if imp.filename in in_snapshot:
+                    all_results.append(imp)
         return all_results
     return None
 
@@ -190,10 +158,16 @@ def media(
             help=str(_("Merge into existing MEDIA_ROOT instead of replacing")),
         ),
     ] = False,
-) -> MediaArtifactImporter:
-    imp = MediaArtifactImporter(directory=media_root or "", merge=merge)
+) -> MediaArtifactImporter | None:
+    cmd = cast(SnapshotsCommand, self)
+    directory = media_root or str(django_settings.MEDIA_ROOT or "")
+    if not directory:
+        cmd.echo("MEDIA_ROOT is not set; skipping media.", err=True)
+        return None
+    _check_storage_outside(cmd.settings.storage, directory)
+    imp = MediaArtifactImporter(directory=directory, merge=merge)
     if sys.stdin.isatty():
-        cast(SnapshotsCommand, self).echo(f"  Directory : {imp.directory}")
+        cmd.echo(f"  Directory : {imp.directory}")
     return imp
 
 
@@ -218,7 +192,7 @@ def environment(
 @restore.finalize()
 def restore_finalize(
     self,
-    results: list[AnyArtifactImporter | list[AnyArtifactImporter]],
+    results: list[AnyArtifactImporter | list[AnyArtifactImporter] | None],
 ) -> None:
     """Download artifacts, verify checksums, and restore."""
     cmd = cast(_RestoreCommand, self)
@@ -234,13 +208,17 @@ def restore_finalize(
 
         artifact_map = {a.filename: a for a in snapshot.artifacts}
 
-        # flatten the list of importers (supporting nested lists)
+        # flatten the list of importers (supporting nested lists), dropping
+        # subcommands that had nothing to restore
         importers: list[AnyArtifactImporter] = [
             y
             for x in results
             for y in (
-                x if isinstance(x, list) else cast(list[AnyArtifactImporter], [x])
+                x
+                if isinstance(x, (list, tuple))
+                else cast(list[AnyArtifactImporter], [x])
             )
+            if y is not None
         ]
 
         # ------------------------------------------------------------------ #
@@ -259,10 +237,10 @@ def restore_finalize(
                 (a for a in snapshot.artifacts if a.type == "environment"), None
             )
             if env_art:
-                env_dest = cmd._restore_temp_dir / env_art.filename
-                with storage.read(f"{name}/{env_art.filename}") as f:
-                    env_dest.write_bytes(f.read())
-                check_only_imp.restore(env_dest)
+                fetch_artifacts(
+                    storage, snapshot, [env_art.filename], cmd._restore_temp_dir
+                )
+                check_only_imp.restore(cmd._restore_temp_dir / env_art.filename)
             raise SystemExit(0)
 
         # ------------------------------------------------------------------ #
@@ -287,23 +265,14 @@ def restore_finalize(
                 )
 
         # ------------------------------------------------------------------ #
-        # 3. Download all artifacts concurrently                              #
+        # 3. Download all artifacts                                           #
         # ------------------------------------------------------------------ #
-        def _download_one(filename: str, dest: Path) -> None:
-            with storage.read(f"{name}/{filename}") as f:
-                dest.write_bytes(f.read())
-
-        async def _gather_downloads() -> None:
-            loop = asyncio.get_running_loop()
-            tasks = [
-                loop.run_in_executor(
-                    None, _download_one, filename, cmd._restore_temp_dir / filename
-                )
-                for _, filename in pairs
-            ]
-            await async_tqdm.gather(*tasks, desc="Downloading artifacts")
-
-        syncify(_gather_downloads, raise_sync_error=False)()
+        fetch_artifacts(
+            storage,
+            snapshot,
+            [filename for _, filename in pairs],
+            cmd._restore_temp_dir,
+        )
 
         # ------------------------------------------------------------------ #
         # 4. Verify checksums (all-or-nothing before any restore runs)        #

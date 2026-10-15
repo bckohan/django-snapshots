@@ -9,6 +9,7 @@ from __future__ import annotations
 import builtins
 import os
 import shutil
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import IO
@@ -23,30 +24,43 @@ class LocalFileSystemBackend:
     subject to OOM on large artifacts.
 
     Args:
-        location: Absolute path to the root directory for snapshot storage.
-            Created automatically if it does not exist.
+        location: Path to the root directory for snapshot storage. Created on
+            first write if it does not exist.
     """
 
-    def __init__(self, location: str) -> None:
-        self.location = Path(location)
-        self.location.mkdir(parents=True, exist_ok=True)
+    def __init__(self, location: str | os.PathLike[str]) -> None:
+        self.location = Path(location).absolute()
 
     def _abs(self, path: str) -> Path:
-        return self.location / path
+        target = (self.location / path).resolve()
+        if not target.is_relative_to(self.location.resolve()):
+            raise ValueError(f"Path {path!r} escapes storage location.")
+        return target
 
     def read(self, path: str) -> IO[bytes]:
         return open(self._abs(path), "rb")
 
     def write(self, path: str, content: IO[bytes]) -> None:
+        """Write *content* to *path* atomically: readers never see a partial file."""
         dest = self._abs(path)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        with open(dest, "wb") as f:
-            shutil.copyfileobj(content, f)
+        fd, tmp = tempfile.mkstemp(
+            dir=dest.parent, prefix=f".{dest.name}.", suffix=".partial"
+        )
+        try:
+            with os.fdopen(fd, "wb") as f:
+                shutil.copyfileobj(content, f)
+            os.replace(tmp, dest)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
     def list(self, prefix: str) -> builtins.list[str]:
-        root = self.location
+        root = self.location.resolve()
         results: builtins.list[str] = []
-        for dirpath, _, filenames in os.walk(root):
+        # only walk the subtree that can contain matches
+        start = self._abs(prefix.rpartition("/")[0]) if "/" in prefix else root
+        for dirpath, _, filenames in os.walk(start):
             for filename in filenames:
                 full = Path(dirpath) / filename
                 rel = full.relative_to(root).as_posix()
@@ -59,7 +73,15 @@ class LocalFileSystemBackend:
         try:
             target.unlink()
         except FileNotFoundError:
-            pass
+            return
+        # prune directories left empty, stopping at the storage root
+        parent = target.parent
+        while parent != self.location.resolve():
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
 
     def exists(self, path: str) -> bool:
         return self._abs(path).exists()

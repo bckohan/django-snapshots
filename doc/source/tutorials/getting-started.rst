@@ -76,6 +76,56 @@ Check that the ``snapshots`` management command is available:
 You should see a list of subcommands including ``backup``, ``restore``, ``list``,
 ``info``, ``delete``, ``prune``, and ``check``.
 
+Take your first snapshot
+------------------------
+
+Back up everything (all databases, ``MEDIA_ROOT`` and the installed Python
+packages) with:
+
+.. code-block:: bash
+
+    python manage.py snapshots backup
+
+Or pick specific artifacts, which can be chained:
+
+.. code-block:: bash
+
+    python manage.py snapshots backup --name before-upgrade database media
+
+Media is skipped with a warning if ``MEDIA_ROOT`` is not set. Pass
+``--format archive`` to store the snapshot as a single ``.tar`` file.
+
+Inspect your snapshots:
+
+.. code-block:: bash
+
+    python manage.py snapshots list
+    python manage.py snapshots info before-upgrade
+
+Restore a snapshot
+------------------
+
+.. warning::
+
+    Restoring **replaces** the current database contents and ``MEDIA_ROOT``.
+
+.. code-block:: bash
+
+    python manage.py snapshots restore                         # latest snapshot
+    python manage.py snapshots restore --name before-upgrade   # a specific one
+    python manage.py snapshots restore --name before-upgrade database
+
+When run interactively you are asked to confirm before anything is changed.
+Every artifact's checksum is verified before any data is restored.
+
+Housekeeping
+------------
+
+.. code-block:: bash
+
+    python manage.py snapshots prune --keep 10   # delete all but the 10 newest
+    python manage.py snapshots delete before-upgrade
+
 Next steps
 ----------
 

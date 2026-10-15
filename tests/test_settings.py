@@ -16,7 +16,7 @@ def test_snapshot_settings_defaults():
     assert s.database_connectors == {}
     assert s.prune is None
     assert isinstance(s.storage, LocalFileSystemBackend)
-    assert s.storage.location == s.storage.location.__class__(os.getcwd())
+    assert s.storage.location == s.storage.location.__class__(os.getcwd()) / "snapshots"
 
 
 def test_prune_config_from_dict_full():

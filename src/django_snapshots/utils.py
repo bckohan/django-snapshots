@@ -3,42 +3,31 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
+from django_snapshots.containers import delete_snapshot, list_snapshots
 from django_snapshots.manifest import Snapshot
 
+__all__ = ["delete_snapshot", "list_snapshots"]
 
-def list_snapshots(storage) -> list[Snapshot]:
-    """Return all snapshots found in storage, newest-first.
 
-    Scans storage for top-level prefixes that contain a manifest.json.
-    Silently skips entries that cannot be parsed (e.g. corrupt manifests).
+def _check_storage_outside(storage, directory: str) -> None:
+    """Raise ``CommandError`` if local snapshot storage lives inside *directory*.
+
+    Backing that directory up would recursively include older snapshots, and
+    restoring it would delete them.
     """
-    all_paths = storage.list("")
-    prefixes: dict[str, list[str]] = {}
-    for path in all_paths:
-        parts = path.split("/", 1)
-        if parts:
-            prefixes.setdefault(parts[0], []).append(path)
+    from django.core.management import CommandError
 
-    snapshots: list[Snapshot] = []
-    for name, paths in prefixes.items():
-        if not any(p.endswith("/manifest.json") for p in paths):
-            continue
-        try:
-            snap = Snapshot.from_storage(storage, name)
-            snapshots.append(snap)
-        except Exception:  # noqa: BLE001, S112  # nosec B112
-            continue
+    from django_snapshots.storage.local import LocalFileSystemBackend
 
-    snapshots.sort(key=lambda s: s.created_at, reverse=True)
-    return snapshots
-
-
-def delete_snapshot(storage, name: str) -> None:
-    """Delete all files belonging to the named snapshot from storage."""
-    paths = [p for p in storage.list("") if p.startswith(f"{name}/")]
-    for path in paths:
-        storage.delete(path)
+    if isinstance(storage, LocalFileSystemBackend) and (
+        storage.location.resolve().is_relative_to(Path(directory).resolve())
+    ):
+        raise CommandError(
+            f"Snapshot storage ({storage.location}) is inside {directory}; "
+            "configure SNAPSHOTS['storage'] to a location outside it."
+        )
 
 
 def _format_size(size: int) -> str:

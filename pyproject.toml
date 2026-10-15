@@ -1,6 +1,6 @@
 [project]
 name = "django-snapshots"
-version = "0.0.0a0"
+version = "0.1.0b1"
 description = "A generic and pluggable backup and restore management utility for Django."
 requires-python = ">=3.11,<4.0"
 authors = [
@@ -26,7 +26,7 @@ classifiers = [
     "Framework :: Django",
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Development Status :: 1 - Planning",
+    "Development Status :: 4 - Beta",
     "Framework :: Django :: 5.2",
     "Framework :: Django :: 6.0",
     "Framework :: Django :: 6.1",
