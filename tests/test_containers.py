@@ -6,7 +6,7 @@ import io
 import json
 import os
 import tarfile
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 from django.core.management import call_command
@@ -44,7 +44,7 @@ def _stage(tmp_path, name, created_at=None, files=None):
     snap = Snapshot(
         version="1",
         name=name,
-        created_at=created_at or datetime.now(UTC),
+        created_at=created_at or datetime.now(timezone.utc),
         django_version="5.2",
         python_version="3.12.0",
         hostname="test",
@@ -57,7 +57,7 @@ def _stage(tmp_path, name, created_at=None, files=None):
                 filename=filename,
                 size=len(data),
                 checksum="sha256:x",
-                created_at=datetime.now(UTC),
+                created_at=datetime.now(timezone.utc),
             )
             for filename, data in files.items()
         ],
@@ -92,7 +92,7 @@ def test_validate_name_rejects(name):
 
 
 def test_render_name_template_and_callable():
-    created = datetime(2026, 3, 13, 12, 0, 0, tzinfo=UTC)
+    created = datetime(2026, 3, 13, 12, 0, 0, tzinfo=timezone.utc)
     assert (
         SnapshotSettings(snapshot_name="{timestamp_utc}").render_name(created)
         == "2026-03-13T12-00-00-UTC"
@@ -144,8 +144,8 @@ def test_archive_is_single_tar_with_manifest_first(tmp_path, storage):
 
 
 def test_list_snapshots_mixes_formats_newest_first(tmp_path, storage):
-    old = datetime(2026, 1, 1, tzinfo=UTC)
-    new = datetime(2026, 2, 1, tzinfo=UTC)
+    old = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    new = datetime(2026, 2, 1, tzinfo=timezone.utc)
     write_snapshot(
         storage, "old", _stage(tmp_path, "old", old), SnapshotFormat.DIRECTORY
     )

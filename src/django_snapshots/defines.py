@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
+from django_snapshots._compat import StrEnum
 
 
 class SnapshotFormat(StrEnum):

@@ -77,6 +77,12 @@ jobs:
             postgres-image: "postgres:14@sha256:478536bf0d40b12f7dcd9baec518da5eafdbe0228fe4df5f36c40e964704542c"
           - postgres-version: "latest"
             postgres-image: "postgres:latest@sha256:cfca8125dc0f78cfdb2088e49d8446aa58e2b2d7fefbf53dc1f04dc44f811a3a"
+          # oldest supported python with Django 4.2 (django-typer 2.x)
+          - python-version: "3.8"
+            django-version: "dj42"
+            psycopg-version: "psycopg2"
+            postgres-version: "14"
+            postgres-image: "postgres:14@sha256:478536bf0d40b12f7dcd9baec518da5eafdbe0228fe4df5f36c40e964704542c"
 
     env:
       RDBMS: postgres
@@ -183,6 +189,21 @@ jobs:
             django-version: "dj52"
           - python-version: "3.11"
             django-version: "dj61"
+        include:
+          # Django 4.2 on the old Pythons; covers django-typer 2.x (3.8) and
+          # 3.x (3.9, 3.10)
+          - python-version: "3.8"
+            django-version: "dj42"
+            dependencies: "lowest-direct"
+          - python-version: "3.8"
+            django-version: "dj42"
+            dependencies: "highest"
+          - python-version: "3.9"
+            django-version: "dj42"
+            dependencies: "highest"
+          - python-version: "3.10"
+            django-version: "dj42"
+            dependencies: "highest"
 
     steps:
       - name: Clear Tool cache
@@ -256,6 +277,12 @@ jobs:
             mysql-image: "mysql:8.0@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b"
           - mysql-version: "latest"
             mysql-image: "mysql:latest@sha256:66aec17cd21a956029b83f083b813073859e8355dc1a00e55df6ba02f0e32345"
+          # oldest supported python with Django 4.2 (django-typer 2.x)
+          - python-version: "3.8"
+            django-version: "dj42"
+            mysqlclient-version: "mysqlclient2x"
+            mysql-version: "8.0"
+            mysql-image: "mysql:8.0@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b"
 
     env:
       RDBMS: mysql

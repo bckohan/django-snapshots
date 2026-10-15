@@ -88,10 +88,9 @@ def read_manifest(storage: SnapshotStorage, name: str) -> Snapshot:
                 data = json.load(f)
         else:
             data = None
-            with (
-                storage.read(_archive_path(name)) as f,
-                tarfile.open(fileobj=f, mode="r|") as tar,
-            ):
+            with storage.read(_archive_path(name)) as f, tarfile.open(
+                fileobj=f, mode="r|"
+            ) as tar:
                 member = tar.next()
                 if member is not None and member.name == MANIFEST:
                     extracted = tar.extractfile(member)
@@ -124,7 +123,7 @@ def list_snapshots(storage: SnapshotStorage) -> list[Snapshot]:
         if path.count("/") == 1 and path.endswith(f"/{MANIFEST}"):
             names[path.split("/", 1)[0]] = None
         elif "/" not in path and path.endswith(ARCHIVE_SUFFIX):
-            names[path.removesuffix(ARCHIVE_SUFFIX)] = None
+            names[path[: -len(ARCHIVE_SUFFIX)]] = None
 
     snapshots: list[Snapshot] = []
     for name in names:
@@ -220,10 +219,8 @@ def fetch_artifacts(
     if snapshot.format == SnapshotFormat.DIRECTORY:
 
         def _download(filename: str) -> None:
-            with (
-                storage.read(f"{snapshot.name}/{filename}") as src,
-                open(dest_dir / filename, "wb") as dst,
-            ):
+            path = f"{snapshot.name}/{filename}"
+            with storage.read(path) as src, open(dest_dir / filename, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
         with ThreadPoolExecutor() as pool:
@@ -232,10 +229,9 @@ def fetch_artifacts(
         return
 
     found: set[str] = set()
-    with (
-        storage.read(_archive_path(snapshot.name)) as f,
-        tarfile.open(fileobj=f, mode="r|") as tar,
-    ):
+    with storage.read(_archive_path(snapshot.name)) as f, tarfile.open(
+        fileobj=f, mode="r|"
+    ) as tar:
         for member in tar:
             # members are matched by exact name against the manifest, so
             # arbitrary paths in a tampered archive are never written

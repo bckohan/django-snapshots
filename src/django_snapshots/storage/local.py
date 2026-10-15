@@ -14,6 +14,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import IO
 
+from django_snapshots._compat import is_relative_to
+
 CHUNK_SIZE = 256 * 1024  # 256 KB
 
 
@@ -33,7 +35,7 @@ class LocalFileSystemBackend:
 
     def _abs(self, path: str) -> Path:
         target = (self.location / path).resolve()
-        if not target.is_relative_to(self.location.resolve()):
+        if not is_relative_to(target, self.location.resolve()):
             raise ValueError(f"Path {path!r} escapes storage location.")
         return target
 

@@ -1,7 +1,5 @@
 """Restore command group — registered as a plugin on the root ``snapshots`` command."""
 
-from __future__ import annotations
-
 import asyncio
 import hashlib
 import inspect
@@ -10,14 +8,16 @@ import sys
 import tempfile
 from collections.abc import Awaitable
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, cast
+from typing import TYPE_CHECKING, Any, List, Optional, Union, cast
 
 import typer
 from asyncer import syncify
 from django.conf import settings as django_settings
 from django.utils.translation import gettext_lazy as _
 from tqdm.asyncio import tqdm as async_tqdm
+from typing_extensions import Annotated
 
+from django_snapshots._compat import finalize
 from django_snapshots.artifacts.protocols import AnyArtifactImporter
 from django_snapshots.completers import snapshot_names
 from django_snapshots.containers import fetch_artifacts, list_snapshots
@@ -40,10 +40,11 @@ if TYPE_CHECKING:
 
 
 class _RestoreCommand(SnapshotsCommand):
-    _restore_storage: SnapshotStorage
+    _restore_storage: "SnapshotStorage"
     _restore_temp_dir: Path
     _restore_snapshot: Snapshot
     _restore_name: str
+    _restore_default_results: List[AnyArtifactImporter]
 
 
 def _sha256(path: Path) -> str:
@@ -56,8 +57,8 @@ def _sha256(path: Path) -> str:
 
 
 def _create_database_importers(
-    snapshot: Snapshot, databases: list[str] | None = None
-) -> list[DatabaseArtifactImporter]:
+    snapshot: Snapshot, databases: Optional[List[str]] = None
+) -> List[DatabaseArtifactImporter]:
     manifest_aliases = {
         a.metadata.get("database")
         for a in snapshot.artifacts
@@ -84,14 +85,14 @@ def restore(
     self,
     ctx: typer.Context,
     name: Annotated[
-        Snapshot | None,
+        Optional[Snapshot],
         typer.Option(
             help=str(_("Snapshot name (default: latest)")),
-            parser=SNAPSHOT,
+            click_type=SNAPSHOT,
             shell_complete=snapshot_names,
         ),
     ] = None,
-) -> list[AnyArtifactImporter] | None:
+) -> Optional[List[AnyArtifactImporter]]:
     """Initialise restore state and load manifest (runs before any subcommand)."""
     cmd = cast(_RestoreCommand, self)
     cmd._restore_storage = cmd.settings.storage
@@ -104,11 +105,12 @@ def restore(
     cmd._restore_name = name.name
     cmd._restore_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_restore_"))
 
+    cmd._restore_default_results = []
     if not ctx.invoked_subcommand:
         # restore everything the snapshot contains; artifacts it doesn't
         # contain are only worth a warning when explicitly requested
         in_snapshot = {a.filename for a in name.artifacts}
-        all_results: list[AnyArtifactImporter] = []
+        all_results: List[AnyArtifactImporter] = []
         for child in cmd.get_subcommand("restore").children.values():
             result = child()
             if result is None:
@@ -116,6 +118,9 @@ def restore(
             for imp in result if isinstance(result, (list, tuple)) else [result]:
                 if imp.filename in in_snapshot:
                     all_results.append(imp)
+        # click discards a chained group's return value when no subcommand is
+        # invoked on some django-typer versions, so finalize falls back to this
+        cmd._restore_default_results = all_results
         return all_results
     return None
 
@@ -129,13 +134,13 @@ def restore(
 def database(
     self,
     databases: Annotated[
-        list[str] | None,
+        Optional[List[str]],
         typer.Option(
             "--databases",
             help=str(_("DB aliases to restore (default: all in snapshot)")),
         ),
     ] = None,
-) -> list[DatabaseArtifactImporter]:
+) -> List[DatabaseArtifactImporter]:
     cmd = cast(_RestoreCommand, self)
     importers = _create_database_importers(cmd._restore_snapshot, databases=databases)
     if sys.stdin.isatty():
@@ -148,7 +153,7 @@ def database(
 def media(
     self,
     media_root: Annotated[
-        str | None,
+        Optional[str],
         typer.Option("--media-root", help=str(_("Override MEDIA_ROOT restore path"))),
     ] = None,
     merge: Annotated[
@@ -158,7 +163,7 @@ def media(
             help=str(_("Merge into existing MEDIA_ROOT instead of replacing")),
         ),
     ] = False,
-) -> MediaArtifactImporter | None:
+) -> Optional[MediaArtifactImporter]:
     cmd = cast(SnapshotsCommand, self)
     directory = media_root or str(django_settings.MEDIA_ROOT or "")
     if not directory:
@@ -189,10 +194,10 @@ def environment(
 # ---------------------------------------------------------------------------
 
 
-@restore.finalize()
+@finalize(restore)
 def restore_finalize(
     self,
-    results: list[AnyArtifactImporter | list[AnyArtifactImporter] | None],
+    results: List[Union[AnyArtifactImporter, List[AnyArtifactImporter], None]],
 ) -> None:
     """Download artifacts, verify checksums, and restore."""
     cmd = cast(_RestoreCommand, self)
@@ -210,13 +215,13 @@ def restore_finalize(
 
         # flatten the list of importers (supporting nested lists), dropping
         # subcommands that had nothing to restore
-        importers: list[AnyArtifactImporter] = [
+        importers: List[AnyArtifactImporter] = [
             y
-            for x in results
+            for x in results or cmd._restore_default_results
             for y in (
                 x
                 if isinstance(x, (list, tuple))
-                else cast(list[AnyArtifactImporter], [x])
+                else cast(List[AnyArtifactImporter], [x])
             )
             if y is not None
         ]
@@ -292,7 +297,7 @@ def restore_finalize(
         # ------------------------------------------------------------------ #
         async def _gather_restores() -> None:
             loop = asyncio.get_running_loop()
-            tasks: list[Awaitable[Any]] = []
+            tasks: List[Awaitable[Any]] = []
             for imp, filename in pairs:
                 src = cmd._restore_temp_dir / filename
                 if inspect.iscoroutinefunction(imp.restore):

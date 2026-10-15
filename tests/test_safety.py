@@ -68,9 +68,8 @@ def test_backup_and_restore_skip_media_without_media_root(
 def test_backup_with_nothing_to_back_up_errors(snap_settings):
     from django.core.management import CommandError
 
-    with (
-        override_settings(SNAPSHOTS=snap_settings, MEDIA_ROOT=""),
-        pytest.raises(CommandError, match="Nothing to back up"),
+    with override_settings(SNAPSHOTS=snap_settings, MEDIA_ROOT=""), pytest.raises(
+        CommandError, match="Nothing to back up"
     ):
         call_command("snapshots", "backup", "--name", "s", "media")
     assert detect_format(snap_settings.storage, "s") is None
@@ -472,10 +471,9 @@ def test_media_refused_when_storage_inside_media_root(tmp_path):
     snap_settings = SnapshotSettings(
         storage=LocalFileSystemBackend(location=tmp_path / "snapshots")
     )
-    with (
-        override_settings(SNAPSHOTS=snap_settings, MEDIA_ROOT=str(tmp_path)),
-        pytest.raises(CommandError, match="inside"),
-    ):
+    with override_settings(
+        SNAPSHOTS=snap_settings, MEDIA_ROOT=str(tmp_path)
+    ), pytest.raises(CommandError, match="inside"):
         call_command("snapshots", "backup", "--name", "s", "media")
 
 

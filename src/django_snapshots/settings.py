@@ -21,12 +21,15 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Protocol, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from dateutil.relativedelta import relativedelta
 from django.core.exceptions import ImproperlyConfigured
 
 from django_snapshots.defines import SnapshotFormat
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 # ---------------------------------------------------------------------------
 # ISO 8601 duration helpers

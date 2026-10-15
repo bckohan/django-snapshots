@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from django_typer.parsers import Context, Parameter, ParamType
+from django_snapshots._compat import Context, Parameter, ParamType
 
 if TYPE_CHECKING:
     from django_snapshots.manifest import Snapshot

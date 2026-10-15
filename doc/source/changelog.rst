@@ -8,9 +8,9 @@ Changelog
 
 First beta release.
 
-* Require Python 3.11+ (drop 3.10, add 3.15)
-* Support Django 5.2, 6.0 and 6.1 (drop 4.2)
-* Require django-typer 4.0+
+* Support Python 3.8 through 3.15 (add 3.15)
+* Support Django 4.2, 5.0, 5.1, 5.2, 6.0 and 6.1
+* Support django-typer 2.2+ on Python 3.8 and 3.4+ on Python 3.9 and later
 * Add the ``archive`` snapshot format: a single ``<name>.tar`` per snapshot,
   usable with any storage backend. ``snapshots backup --format`` overrides the
   ``snapshot_format`` setting.

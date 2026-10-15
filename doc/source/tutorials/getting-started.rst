@@ -12,8 +12,8 @@ storage, and taking your first snapshot.
 Prerequisites
 -------------
 
-- Python 3.11+
-- Django 5.2, 6.0, or 6.1
+- Python 3.8+
+- Django 4.2, 5.0, 5.1, 5.2, 6.0, or 6.1
 - An existing Django project (any database backend)
 
 Installation

@@ -1,7 +1,5 @@
 """Backup command group — registered as a plugin on the root ``snapshots`` command."""
 
-from __future__ import annotations
-
 import asyncio
 import hashlib
 import importlib
@@ -12,9 +10,9 @@ import socket
 import sys
 import tempfile
 from collections.abc import Awaitable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, cast
+from typing import TYPE_CHECKING, Any, List, Optional, Union, cast
 
 import django
 import typer
@@ -22,9 +20,10 @@ from asyncer import syncify
 from django.conf import settings as django_settings
 from django.core.management import CommandError
 from django.utils.translation import gettext_lazy as _
-from django_typer.completers.path import directories
 from tqdm.asyncio import tqdm as async_tqdm
+from typing_extensions import Annotated
 
+from django_snapshots._compat import directories, finalize
 from django_snapshots.artifacts.protocols import AnyArtifactExporter
 from django_snapshots.backup.artifacts.database import DatabaseArtifactExporter
 from django_snapshots.backup.artifacts.environment import (
@@ -49,12 +48,13 @@ if TYPE_CHECKING:
 
 
 class _BackupCommand(SnapshotsCommand):
-    _backup_storage: SnapshotStorage
+    _backup_storage: "SnapshotStorage"
     _backup_overwrite: bool
     _backup_created_at: datetime
     _backup_name: str
     _backup_format: SnapshotFormat
     _backup_temp_dir: Path
+    _backup_default_results: List[AnyArtifactExporter]
 
 
 def _sha256(path: Path) -> str:
@@ -81,7 +81,7 @@ def backup(
     self,
     ctx: typer.Context,
     name: Annotated[
-        str | None,
+        Optional[str],
         typer.Option(
             help=str(_("Snapshot name (default: from the snapshot_name setting)"))
         ),
@@ -93,20 +93,20 @@ def backup(
         ),
     ] = False,
     snapshot_format: Annotated[
-        SnapshotFormat | None,
+        Optional[SnapshotFormat],
         typer.Option(
             "--format",
             help=str(_("Storage format (default: from the snapshot_format setting)")),
         ),
     ] = None,
-) -> list[AnyArtifactExporter] | None:
+) -> Optional[List[AnyArtifactExporter]]:
     """Initialise backup state (runs before any subcommand)."""
     cmd = cast(_BackupCommand, self)
     cmd._backup_storage = cmd.settings.storage
     cmd._backup_overwrite = overwrite
     cmd._backup_format = snapshot_format or cmd.settings.snapshot_format
 
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     cmd._backup_created_at = now
     try:
         cmd._backup_name = validate_name(name or cmd.settings.render_name(now))
@@ -114,8 +114,9 @@ def backup(
         raise typer.BadParameter(str(err), param_hint="--name") from err
     cmd._backup_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_backup_"))
 
+    cmd._backup_default_results = []
     if not ctx.invoked_subcommand:
-        all_results: list[AnyArtifactExporter] = []
+        all_results: List[AnyArtifactExporter] = []
         for child in cmd.get_subcommand("backup").children.values():
             result = child()
             if result is None:
@@ -124,6 +125,9 @@ def backup(
                 all_results.extend(result)
             else:
                 all_results.append(result)
+        # click discards a chained group's return value when no subcommand is
+        # invoked on some django-typer versions, so finalize falls back to this
+        cmd._backup_default_results = all_results
         return all_results
     return None
 
@@ -138,17 +142,17 @@ def backup(
 def database(
     self,
     databases: Annotated[
-        list[str] | None,
+        Optional[List[str]],
         typer.Option("--databases", help=str(_("DB aliases to export (default: all)"))),
     ] = None,
     connector: Annotated[
-        str | None,
+        Optional[str],
         typer.Option(
             "--connector",
             help=str(_("Dotted path to connector class (overrides auto-detect)")),
         ),
     ] = None,
-) -> list[DatabaseArtifactExporter]:
+) -> List[DatabaseArtifactExporter]:
     aliases = databases or list(django_settings.DATABASES.keys())
     exporters = []
     for alias in aliases:
@@ -165,14 +169,14 @@ def database(
 def media(
     self,
     media_root: Annotated[
-        str | None,
+        Optional[str],
         typer.Option(
             "--media-root",
             help=str(_("Override MEDIA_ROOT path")),
             shell_complete=directories,
         ),
     ] = None,
-) -> MediaArtifactExporter | None:
+) -> Optional[MediaArtifactExporter]:
     directory = media_root or str(django_settings.MEDIA_ROOT or "")
     if not directory:
         cast(SnapshotsCommand, self).echo(
@@ -195,19 +199,19 @@ def environment(
 # ---------------------------------------------------------------------------
 
 
-@backup.finalize()
+@finalize(backup)
 def backup_finalize(
     self,
-    results: list[AnyArtifactExporter | list[AnyArtifactExporter] | None],
+    results: List[Union[AnyArtifactExporter, List[AnyArtifactExporter], None]],
 ) -> None:
     """Check for collision, generate artifacts, compute checksums, write manifest."""
     cmd = cast(_BackupCommand, self)
     try:
         # flatten the list of exporters (supporting nested lists/tuples), dropping
         # subcommands that had nothing to back up
-        exporters: list[AnyArtifactExporter] = [
+        exporters: List[AnyArtifactExporter] = [
             y
-            for x in results
+            for x in results or cmd._backup_default_results
             for y in (x if isinstance(x, (list, tuple)) else [x])
             if y is not None
         ]
@@ -234,7 +238,7 @@ def backup_finalize(
         # ------------------------------------------------------------------ #
         async def _gather() -> None:
             loop = asyncio.get_running_loop()
-            tasks: list[Awaitable[Any]] = []
+            tasks: List[Awaitable[Any]] = []
             for exp in exporters:
                 dest = cmd._backup_temp_dir / exp.filename
                 if inspect.iscoroutinefunction(exp.generate):
@@ -248,7 +252,7 @@ def backup_finalize(
         # ------------------------------------------------------------------ #
         # 2. Compute checksums and build ArtifactRecord list                  #
         # ------------------------------------------------------------------ #
-        artifact_records: list[ArtifactRecord] = []
+        artifact_records: List[ArtifactRecord] = []
         for exp in exporters:
             dest = cmd._backup_temp_dir / exp.filename
             checksum = _sha256(dest)
@@ -258,7 +262,7 @@ def backup_finalize(
                     filename=exp.filename,
                     size=dest.stat().st_size,
                     checksum=f"sha256:{checksum}",
-                    created_at=datetime.now(UTC),
+                    created_at=datetime.now(timezone.utc),
                     metadata=dict(exp.metadata),
                 )
             )
