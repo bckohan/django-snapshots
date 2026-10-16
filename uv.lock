@@ -22,6 +22,12 @@ conflicts = [[
     { package = "django-snapshots", group = "psycopg3" },
 ]]
 
+[manifest]
+
+[[manifest.dependency-metadata]]
+name = "mysqlclient"
+version = "1.4.3"
+
 [[package]]
 name = "accessible-pygments"
 version = "0.0.5"

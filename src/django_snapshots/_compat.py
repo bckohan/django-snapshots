@@ -31,7 +31,7 @@ try:
     # are typer's vendored copy of click, which is what typer expects
     from django_typer.parsers import Context, Parameter, ParamType
 except ImportError:  # pragma: no cover - django-typer 3.x uses click directly
-    from click import (  # type: ignore[assignment]
+    from click import (  # type: ignore[assignment, no-redef, unused-ignore]
         Context,
         Parameter,
         ParamType,
@@ -71,7 +71,7 @@ def finalize(group: t.Any) -> t.Callable[[F], F]:
         return group.finalize()
 
     def register(func: F) -> F:  # pragma: no cover - django-typer < 3
-        import click
+        import click  # pyright: ignore[reportMissingImports] - django-typer < 3 requires click
 
         def result_callback(results: t.Any, **_: t.Any) -> t.Any:
             command = click.get_current_context().find_root().django_command  # type: ignore[attr-defined]

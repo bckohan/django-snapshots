@@ -266,6 +266,58 @@ def test_postgres_dump_is_restorable_over_existing_db(tmp_path, monkeypatch, set
         assert kwargs["env"]["PGPASSWORD"] == "hunter2"
 
 
+_PG_DUMP_HEADER = """--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version {server}
+-- Dumped by pg_dump version 18.6
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+
+CREATE TABLE t (id integer);
+"""
+
+
+@pytest.mark.parametrize(
+    ("server", "commented"),
+    [("14.17 (Debian 14.17-1.pgdg120+1)", True), ("9.6.24", True), ("17.2", False)],
+)
+def test_postgres_newer_settings_commented_out_for_older_servers(
+    tmp_path, server, commented
+):
+    from django_snapshots.connectors.postgres import _comment_out_unsupported_settings
+
+    dump = tmp_path / "d.sql"
+    original = _PG_DUMP_HEADER.format(server=server)
+    dump.write_text(original)
+    _comment_out_unsupported_settings(dump)
+    result = dump.read_text()
+
+    assert len(result) == len(original)
+    assert ("SET transaction_timeout = 0;" in result) is not commented
+    if commented:
+        assert result == original.replace(
+            "SET transaction_timeout = 0;", "--  transaction_timeout = 0;"
+        )
+    else:
+        assert result == original
+
+
+def test_postgres_dump_without_version_header_untouched(tmp_path):
+    from django_snapshots.connectors.postgres import _comment_out_unsupported_settings
+
+    dump = tmp_path / "d.sql"
+    original = "SET transaction_timeout = 0;\n"
+    dump.write_text(original)
+    _comment_out_unsupported_settings(dump)
+    assert dump.read_text() == original
+
+
 def test_is_mariadb_client_detection(monkeypatch):
     import subprocess
 

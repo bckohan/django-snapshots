@@ -78,6 +78,14 @@ conflicts = [
   ],
 ]
 
+# mysqlclient 1.4.3 publishes no wheels, so resolving the dependency groups
+# would otherwise build it from source on every platform, which fails where the
+# MySQL client headers aren't installed (e.g. macOS and Windows CI runners).
+[[tool.uv.dependency-metadata]]
+name = "mysqlclient"
+version = "1.4.3"
+requires-dist = []
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/django_snapshots"]
 

@@ -33,6 +33,9 @@ First beta release.
 * Fix: PostgreSQL restores over an existing database silently failed. Dumps
   now use ``--clean --if-exists --no-owner``, and restores run in a single
   transaction that stops on the first error.
+* Fix: PostgreSQL dumps made with ``pg_dump`` 17 or later of an older server
+  failed to restore, because ``pg_dump`` emits ``SET transaction_timeout``,
+  which older servers reject. That setting is now commented out of such dumps.
 * Fix: the MySQL password was visible in the process list, and MySQL-only
   ``mysqldump`` flags broke MariaDB clients. Dumps now use
   ``--single-transaction``.
