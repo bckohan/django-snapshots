@@ -3,7 +3,7 @@
 Changelog
 =========
 
-0.1.0b1 (unreleased)
+0.1.0b1 (2026-10-16)
 --------------------
 
 First beta release.
