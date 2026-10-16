@@ -24,6 +24,7 @@ checksummed snapshot, and restore it with one command.
 - Snapshots stored as a directory or as a single `.tar` archive, on the local filesystem or any Django storage backend.
 - SHA-256 checksums for every artifact, all verified before any data is restored.
 - Retention policies (`keep`, `duration`, `max_size`) for pruning old snapshots.
+- A read-only Django admin page for browsing the snapshots in storage.
 - Pluggable: add your own artifact types, database connectors and storage backends.
 
 ## Installation
@@ -48,6 +49,8 @@ SNAPSHOTS = {
     },
 }
 ```
+
+Then run `python manage.py migrate` (django-snapshots adds one always-empty table that backs its admin page and permission).
 
 ## Usage
 

@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 class SnapshotsConfig(AppConfig):
     name = "django_snapshots"
     label = "snapshots"
+    default_auto_field = "django.db.models.BigAutoField"
     verbose_name = _("Snapshots")
 
     def ready(self) -> None:

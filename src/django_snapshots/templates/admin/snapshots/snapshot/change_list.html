@@ -1,0 +1,62 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static "admin/css/changelists.css" %}">{% endblock %}
+
+{% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} change-list{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; {{ opts.verbose_name_plural|capfirst }}
+</div>
+{% endblock %}
+
+{% block coltype %}flex{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module" id="changelist">
+    <div class="changelist-form-container">
+      <div>
+      {% if rows %}
+      <div class="results">
+        <table id="result_list">
+          <thead>
+            <tr>
+              <th scope="col"><div class="text"><span>{% translate "Name" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% translate "Created" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% translate "Format" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% translate "Host" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% translate "Django" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% translate "Artifacts" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% translate "Count" %}</span></div></th>
+              <th scope="col"><div class="text"><span>{% translate "Size" %}</span></div></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>
+              <th class="field-name"><a href="{{ row.url }}">{{ row.snapshot.name }}</a></th>
+              <td class="field-created">{{ row.snapshot.created_at }}</td>
+              <td class="field-format">{{ row.snapshot.format }}</td>
+              <td class="field-hostname">{{ row.snapshot.hostname }}</td>
+              <td class="field-django">{{ row.snapshot.django_version }}</td>
+              <td class="field-types">{{ row.types }}</td>
+              <td class="field-count">{{ row.count }}</td>
+              <td class="field-size">{{ row.size }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p>{% translate "No snapshots found." %}</p>
+      {% endif %}
+      <p class="paginator">{% blocktranslate count counter=rows|length %}{{ counter }} snapshot{% plural %}{{ counter }} snapshots{% endblocktranslate %}</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

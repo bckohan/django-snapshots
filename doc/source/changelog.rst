@@ -11,6 +11,10 @@ First beta release.
 * Support Python 3.8 through 3.15 (add 3.15)
 * Support Django 4.2, 5.0, 5.1, 5.2, 6.0 and 6.1
 * Support django-typer 2.2+ on Python 3.8 and 3.4+ on Python 3.9 and later
+* Add a read-only Django admin page that lists the snapshots in storage and
+  shows each snapshot's manifest. Staff need the ``snapshots.view_snapshot``
+  permission. The ``django_snapshots`` app now has a migration that creates
+  one always-empty table, so run ``migrate`` after upgrading.
 * Add the ``archive`` snapshot format: a single ``<name>.tar`` per snapshot,
   usable with any storage backend. ``snapshots backup --format`` overrides the
   ``snapshot_format`` setting.

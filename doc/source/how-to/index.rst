@@ -13,4 +13,5 @@ Goal-oriented guides for specific tasks. These assume you have already completed
    :maxdepth: 1
 
    configure-storage
+   admin
    custom-connector

@@ -213,6 +213,8 @@ exclude = ["tests/**/*"]
 # types as typing.Optional/List/Union.
 "src/django_snapshots/management/commands/snapshots.py" = ["FA100", "UP006", "UP007", "UP045"]
 "src/django_snapshots/*/management/plugins/snapshots.py" = ["FA100", "UP006", "UP007", "UP045"]
+# Django generates migrations with mutable class attributes.
+"src/django_snapshots/migrations/*.py" = ["RUF012"]
 
 [tool.bandit]
 targets = ["src"]

@@ -61,8 +61,16 @@ defaults — see :ref:`reference-settings` for the full list.
 Run migrations (none needed!)
 ------------------------------
 
-django-snapshots does **not** add database tables, so you do not need to run
-``migrate``.
+Then run ``migrate``:
+
+.. code-block:: bash
+
+    python manage.py migrate
+
+django-snapshots adds one table, which is always empty. It exists so that the
+:ref:`admin snapshot browser <how-to-admin>` has a model to register and a
+``snapshots.view_snapshot`` permission. Snapshots themselves are never stored in
+the database.
 
 Verify the installation
 -----------------------
