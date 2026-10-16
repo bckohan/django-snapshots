@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+  .snapshot-detail table { width: 100%; }
+  .snapshot-detail pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .snapshot-detail code { overflow-wrap: anywhere; }
+  .snapshot-detail details summary { cursor: pointer; padding: 8px 0; }
+</style>
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} change-form{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; <a href="{{ list_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+&rsaquo; {{ snapshot.name }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" class="snapshot-detail">
+  <div class="module">
+    <h2>{% translate "Summary" %}</h2>
+    <table>
+      <tbody>
+        <tr><th scope="row">{% translate "Name" %}</th><td>{{ snapshot.name }}</td></tr>
+        <tr><th scope="row">{% translate "Created" %}</th><td>{{ snapshot.created_at }}</td></tr>
+        <tr><th scope="row">{% translate "Format" %}</th><td>{{ snapshot.format }}</td></tr>
+        <tr><th scope="row">{% translate "Host" %}</th><td>{{ snapshot.hostname }}</td></tr>
+        <tr><th scope="row">{% translate "Django version" %}</th><td>{{ snapshot.django_version }}</td></tr>
+        <tr><th scope="row">{% translate "Python version" %}</th><td>{{ snapshot.python_version }}</td></tr>
+        <tr><th scope="row">{% translate "Manifest version" %}</th><td>{{ snapshot.version }}</td></tr>
+        <tr><th scope="row">{% translate "Total size" %}</th><td>{{ total_size }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="module">
+    <h2>{% translate "Artifacts" %}</h2>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Type" %}</th>
+          <th scope="col">{% translate "Filename" %}</th>
+          <th scope="col">{% translate "Size" %}</th>
+          <th scope="col">{% translate "Checksum" %}</th>
+          <th scope="col">{% translate "Created" %}</th>
+          <th scope="col">{% translate "Metadata" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in artifacts %}
+        <tr>
+          <td>{{ row.artifact.type }}</td>
+          <td>{{ row.artifact.filename }}</td>
+          <td>{{ row.size }}</td>
+          <td><code>{{ row.artifact.checksum }}</code></td>
+          <td>{{ row.artifact.created_at }}</td>
+          <td><pre>{{ row.metadata }}</pre></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6">{% translate "This snapshot has no artifacts." %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="module">
+    <h2>{% translate "Metadata" %}</h2>
+    <pre>{{ metadata }}</pre>
+  </div>
+
+  <details class="module">
+    <summary>{% blocktranslate count counter=snapshot.pip|length %}Python environment ({{ counter }} package){% plural %}Python environment ({{ counter }} packages){% endblocktranslate %}</summary>
+    <pre>{{ pip }}</pre>
+  </details>
+</div>
+{% endblock %}

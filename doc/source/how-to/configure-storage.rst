@@ -48,9 +48,11 @@ you can wrap any :class:`~django.core.files.storage.Storage` instance with
 .. note::
 
     :class:`~django_snapshots.DjangoStorageBackend` only satisfies the basic
-    :class:`~django_snapshots.SnapshotStorage` protocol. Features that require
-    the :class:`~django_snapshots.AdvancedSnapshotStorage` tier (e.g. archive
-    format) are not available with this backend.
+    :class:`~django_snapshots.SnapshotStorage` protocol, which is all the
+    ``backup``, ``restore`` and management commands need, in either snapshot
+    format. It reads each artifact into memory on write, so prefer
+    :class:`~django_snapshots.LocalFileSystemBackend` for very large
+    snapshots.
 
 Write a custom storage backend
 -------------------------------

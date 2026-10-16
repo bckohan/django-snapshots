@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import IO
 
 from django.core.files.base import ContentFile
-from django.core.files.storage import Storage
+from django.core.files.storage import FileSystemStorage, Storage
 
 
 class DjangoStorageBackend:
@@ -40,9 +40,10 @@ class DjangoStorageBackend:
 
     def list(self, prefix: str) -> builtins.list[str]:
         results: builtins.list[str] = []
-        if hasattr(self._storage, "location"):
-            # FileSystemStorage: walk the filesystem directly for reliability
-            root = Path(self._storage.location)  # type: ignore[attr-defined]
+        if isinstance(self._storage, FileSystemStorage):
+            # walk the filesystem directly for reliability; remote backends
+            # (S3, GCS, ...) also have a ``location`` but it isn't a local path
+            root = Path(self._storage.location)
             for dirpath, _, filenames in os.walk(root):
                 for filename in filenames:
                     full = Path(dirpath) / filename

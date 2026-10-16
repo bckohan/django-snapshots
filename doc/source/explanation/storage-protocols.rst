@@ -31,7 +31,7 @@ The extended tier: ``AdvancedSnapshotStorage``
 -----------------------------------------------
 
 :class:`~django_snapshots.AdvancedSnapshotStorage` adds five more operations
-needed for archive-format snapshots and rclone-based remote sync:
+for streaming and remote-sync features. No built-in command requires them yet:
 
 - ``stream_read(path)`` → ``Iterator[bytes]`` — chunked reads
 - ``stream_write(path, chunks: Iterator[bytes])`` — chunked writes
@@ -72,6 +72,6 @@ Why two tiers?
 
 The two-tier design keeps the API surface minimal for simple use-cases (e.g.
 wrapping an existing Django ``FileSystemStorage`` or ``S3Boto3Storage``) while
-enabling richer features (streaming, archive format, incremental backups) for
+enabling richer features (streaming, remote sync, incremental backups) for
 backends that can support them. A backend author only needs to implement the
 five basic methods to be immediately usable.

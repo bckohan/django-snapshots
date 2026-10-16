@@ -13,12 +13,53 @@
 
 A generic and pluggable backup and restore management utility for Django.
 
-**This is a placeholder release! This library is under rapid initial development, we do not recommend using it yet!**
+Back up your databases, `MEDIA_ROOT` and Python environment into a single,
+checksummed snapshot, and restore it with one command.
+
+**This is a beta release.** The CLI and settings are stabilizing but may still change before 1.0.
+
+## Features
+
+- Native, consistent dumps for SQLite, PostgreSQL and MySQL/MariaDB, with a `dumpdata` fallback for any other backend.
+- Snapshots stored as a directory or as a single `.tar` archive, on the local filesystem or any Django storage backend.
+- SHA-256 checksums for every artifact, all verified before any data is restored.
+- Retention policies (`keep`, `duration`, `max_size`) for pruning old snapshots.
+- A read-only Django admin page for browsing the snapshots in storage.
+- Pluggable: add your own artifact types, database connectors and storage backends.
 
 ## Installation
 
 ```bash
 pip install django-snapshots
+```
+
+```python
+INSTALLED_APPS = [
+    ...
+    "django_snapshots",
+    "django_snapshots.backup",
+    "django_snapshots.restore",
+]
+
+# optional, snapshots go to ./snapshots by default
+SNAPSHOTS = {
+    "STORAGE": {
+        "BACKEND": "django_snapshots.storage.LocalFileSystemBackend",
+        "OPTIONS": {"location": "/var/backups/snapshots"},
+    },
+}
+```
+
+Then run `python manage.py migrate` (django-snapshots adds one always-empty table that backs its admin page and permission).
+
+## Usage
+
+```bash
+python manage.py snapshots backup                       # databases + media + environment
+python manage.py snapshots backup --name pre-deploy database
+python manage.py snapshots list
+python manage.py snapshots restore --name pre-deploy    # or omit --name for the latest
+python manage.py snapshots prune --keep 10
 ```
 
 ## Documentation

@@ -52,8 +52,16 @@ Uses Python's stdlib :mod:`sqlite3` module. No external binaries required.
 PostgresConnector
 ~~~~~~~~~~~~~~~~~
 
-Uses ``pg_dump`` and ``psql``. Requires these binaries on ``PATH``.
+Uses ``pg_dump`` and ``psql``. Requires these binaries on ``PATH``, and
+``pg_dump`` must be at least as new as the server.
 The database password is passed via the ``PGPASSWORD`` environment variable.
+
+Dumps drop and recreate every dumped object (``--clean --if-exists``), so a
+restore replaces the existing data. Ownership is not dumped (``--no-owner``):
+restored objects are owned by the restoring role. Restores run in a single
+transaction and stop at the first error, so a failed restore leaves the
+database unchanged. Tables created after the snapshot was taken are left in
+place.
 
 .. autoclass:: django_snapshots.PostgresConnector
    :members:
@@ -63,7 +71,13 @@ MySQLConnector
 ~~~~~~~~~~~~~~
 
 Uses ``mysqldump`` and ``mysql``. Requires these binaries on ``PATH``.
-Works for both MySQL and MariaDB.
+Works for both MySQL and MariaDB servers with either vendor's client tools.
+The password is passed via the ``MYSQL_PWD`` environment variable, never on
+the command line, and a ``HOST`` starting with ``/`` is treated as a socket.
+
+Dumps use ``--single-transaction`` (a consistent, non-locking snapshot of
+InnoDB tables) and include triggers; each table is dropped and recreated on
+restore. Stored routines and events are not included.
 
 .. autoclass:: django_snapshots.MySQLConnector
    :members:

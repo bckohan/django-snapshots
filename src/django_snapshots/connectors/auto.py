@@ -43,13 +43,13 @@ def get_connector_for_alias(db_alias: str) -> DatabaseConnector:
     """
     from django.conf import settings as django_settings
 
-    snap_settings = getattr(django_settings, "SNAPSHOTS", None)
-    if snap_settings is not None:
-        override = getattr(snap_settings, "database_connectors", {}).get(db_alias)
-        if override is not None and override != "auto":
-            if isinstance(override, str):
-                return _import_class(override)()
-            return override  # already an instance
+    from django_snapshots.settings import SnapshotSettings
+
+    override = SnapshotSettings().database_connectors.get(db_alias)
+    if override is not None and override != "auto":
+        if isinstance(override, str):
+            return _import_class(override)()
+        return override  # already an instance
 
     engine = str(django_settings.DATABASES[db_alias]["ENGINE"])
     connector_class = get_connector_class(engine)

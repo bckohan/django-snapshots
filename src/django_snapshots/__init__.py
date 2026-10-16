@@ -19,7 +19,7 @@ A generic and pluggable backup and restore management utility for Django.
 """
 
 __title__ = "django-snapshots"
-__version__ = "0.0.0a0"
+__version__ = "0.1.0b1"
 __author__ = "Brian Kohan"
 __license__ = "MIT"
 __copyright__ = "Copyright 2026 Brian Kohan"

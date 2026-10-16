@@ -69,7 +69,7 @@ just release 1.2.3   # validates version, tags, and pushes tag to GitHub
 
 Django version and database clients are selected at test-run time via `uv` dependency groups — no lock-file pinning:
 
-- Django version groups (mutually exclusive): `dj52`, `dj61`
+- Django version groups (mutually exclusive): `dj42`, `dj52`, `dj61`
 - PostgreSQL: `psycopg2`, `psycopg3` (mutually exclusive)
 - MySQL/MariaDB: `mysqlclient14`, `mysqlclient2x` (mutually exclusive)
 - Oracle: `oracledb`
@@ -78,7 +78,16 @@ CI passes these as `--group` flags to `just test-all`:
 ```bash
 just test-all --group psycopg3 -p "3.12" --group dj52
 just test-all -p "3.11" --group dj52    # SQLite (no DB client group)
+just test-all -p "3.8" --group dj42     # oldest supported stack (django-typer 2.x)
 ```
+
+Python 3.8 through 3.15 and Django 4.2 through 6.1 are supported, so the code must
+run on Python 3.8. `django-typer` 2.2.x (the last release supporting Python 3.8)
+lacks group finalizers; use the shims in `src/django_snapshots/_compat.py`
+(`finalize`, `StrEnum`, `directories`, `is_relative_to`, click types). Modules that
+define Typer commands must not use `from __future__ import annotations` and must
+spell types as `typing.Optional`/`List`/`Union`, because older typer releases
+cannot read `Annotated` metadata from string annotations on Python < 3.10.
 
 ## Project Structure
 

@@ -16,16 +16,20 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Protocol, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from dateutil.relativedelta import relativedelta
 from django.core.exceptions import ImproperlyConfigured
 
 from django_snapshots.defines import SnapshotFormat
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 # ---------------------------------------------------------------------------
 # ISO 8601 duration helpers
@@ -184,6 +188,19 @@ class PruneConfig(ConfigBase):
         }
 
 
+def _storage_from_dict(config: dict[str, Any]) -> Any:
+    """Instantiate a storage backend from a ``{"BACKEND": ..., "OPTIONS": ...}`` dict."""
+    from django.utils.module_loading import import_string
+
+    try:
+        backend = import_string(config["BACKEND"])
+    except (KeyError, ImportError) as e:
+        raise ImproperlyConfigured(
+            "SNAPSHOTS['storage'] must name an importable 'BACKEND' class."
+        ) from e
+    return backend(**config.get("OPTIONS", {}))
+
+
 def ConfigSingleton(config_key: str):
     from django.core.signals import setting_changed
 
@@ -231,20 +248,25 @@ class SnapshotSettings(ConfigBase, metaclass=ConfigSingleton("SNAPSHOTS")):  # t
     """
 
     storage: Any = None
-    """Storage backend instance. Defaults to :class:`~django_snapshots.storage.local.LocalFileSystemBackend`
-    rooted at the current working directory when not explicitly configured."""
+    """Storage backend instance, or a ``{"BACKEND": "dotted.path", "OPTIONS": {...}}``
+    dict. Defaults to a :class:`~django_snapshots.storage.local.LocalFileSystemBackend`
+    rooted at ``./snapshots`` under the current working directory."""
 
     snapshot_format: SnapshotFormat = SnapshotFormat.DIRECTORY
     """Snapshot container format: ``"directory"`` (default) or ``"archive"``."""
 
     snapshot_name: str | Callable[[datetime], str] = "{timestamp_utc}"
-    """Template string or callable for generating snapshot names."""
+    """Template string or callable for generating default snapshot names.
+
+    Template strings may use the ``{timestamp_utc}`` (e.g.
+    ``2026-03-13T12-00-00-UTC``) and ``{hostname}`` placeholders. A callable
+    receives the UTC creation time and must return the name."""
 
     metadata: dict[str, Any] = field(default_factory=dict)
     """Custom key/value metadata attached to every snapshot manifest."""
 
     encryption: Any = None
-    """Encryption backend instance. ``None`` (default) disables encryption."""
+    """Reserved for a future release. Must be ``None``."""
 
     database_connectors: dict[str, Any] = field(default_factory=dict)
     """Per-alias database connector overrides."""
@@ -256,7 +278,15 @@ class SnapshotSettings(ConfigBase, metaclass=ConfigSingleton("SNAPSHOTS")):  # t
         if self.storage is None:
             from django_snapshots.storage.local import LocalFileSystemBackend
 
-            self.storage = LocalFileSystemBackend(location=os.getcwd())
+            self.storage = LocalFileSystemBackend(
+                location=os.path.join(os.getcwd(), "snapshots")
+            )
+        elif isinstance(self.storage, dict):
+            self.storage = _storage_from_dict(self.storage)
+        if self.encryption is not None:
+            raise ImproperlyConfigured(
+                "SNAPSHOTS['encryption'] is not supported yet; it must be None."
+            )
         if not isinstance(self.snapshot_format, SnapshotFormat):
             try:
                 self.snapshot_format = SnapshotFormat(self.snapshot_format)
@@ -271,11 +301,20 @@ class SnapshotSettings(ConfigBase, metaclass=ConfigSingleton("SNAPSHOTS")):  # t
                 "SNAPSHOTS['snapshot_name'] must be a non-empty string or callable."
             )
 
+    def render_name(self, created_at: datetime) -> str:
+        """Return the default snapshot name for a snapshot created at *created_at*."""
+        if callable(self.snapshot_name):
+            return self.snapshot_name(created_at)
+        return self.snapshot_name.format(
+            timestamp_utc=created_at.strftime("%Y-%m-%dT%H-%M-%S-UTC"),
+            hostname=socket.gethostname(),
+        )
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SnapshotSettings:
         try:
-            kwargs = dict(data)
-            if "prune" in kwargs:
+            kwargs = {key.lower(): value for key, value in data.items()}
+            if kwargs.get("prune") is not None:
                 kwargs["prune"] = PruneConfig.coerce(kwargs["prune"])
             return cls(**kwargs)
         except (TypeError, ImproperlyConfigured) as e:
