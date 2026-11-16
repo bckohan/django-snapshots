@@ -4,14 +4,15 @@ The backup and restore apps attach their own command groups here via
 django-typer's plugin system (see their AppConfig.ready() methods).
 """
 
+from __future__ import annotations
+
 import json
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
+from typing import Annotated
 
 import typer
 from django.utils.translation import gettext_lazy as _
 from django_typer.management import TyperCommand, command
-from typing_extensions import Annotated
 
 from django_snapshots._pip import _pip_freeze
 from django_snapshots.completers import snapshot_names
@@ -98,7 +99,7 @@ class Command(TyperCommand):
     def delete(
         self,
         name: Annotated[
-            Optional[Snapshot],
+            Snapshot | None,
             typer.Argument(
                 help=str(_("Snapshot name")),
                 click_type=SNAPSHOT,
@@ -198,11 +199,11 @@ class Command(TyperCommand):
     def prune(
         self,
         keep: Annotated[
-            Optional[int],
+            int | None,
             typer.Option("--keep", help=str(_("Keep the N most recent snapshots"))),
         ] = None,
         duration: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(
                 "--duration",
                 help=str(
@@ -211,7 +212,7 @@ class Command(TyperCommand):
             ),
         ] = None,
         max_size: Annotated[
-            Optional[int],
+            int | None,
             typer.Option(
                 "--max-size",
                 help=str(_("Maximum total bytes to retain (at least one always kept)")),
@@ -240,9 +241,7 @@ class Command(TyperCommand):
 
         # Compute the cutoff datetime once at command start
         cutoff = (
-            datetime.now(timezone.utc) - parsed_duration
-            if parsed_duration is not None
-            else None
+            datetime.now(UTC) - parsed_duration if parsed_duration is not None else None
         )
 
         snapshots = list_snapshots(storage)
@@ -271,7 +270,7 @@ class Command(TyperCommand):
     def check_env(
         self,
         name: Annotated[
-            Optional[Snapshot],
+            Snapshot | None,
             typer.Argument(
                 help=str(_("Snapshot name (default: latest)")),
                 click_type=SNAPSHOT,

@@ -78,16 +78,12 @@ CI passes these as `--group` flags to `just test-all`:
 ```bash
 just test-all --group psycopg3 -p "3.12" --group dj52
 just test-all -p "3.11" --group dj52    # SQLite (no DB client group)
-just test-all -p "3.8" --group dj42     # oldest supported stack (django-typer 2.x)
+just test-all -p "3.11" --group dj42    # Django 4.2 (django-typer 3.x)
 ```
 
-Python 3.8 through 3.15 and Django 4.2 through 6.1 are supported, so the code must
-run on Python 3.8. `django-typer` 2.2.x (the last release supporting Python 3.8)
-lacks group finalizers; use the shims in `src/django_snapshots/_compat.py`
-(`finalize`, `StrEnum`, `directories`, `is_relative_to`, click types). Modules that
-define Typer commands must not use `from __future__ import annotations` and must
-spell types as `typing.Optional`/`List`/`Union`, because older typer releases
-cannot read `Annotated` metadata from string annotations on Python < 3.10.
+Python 3.11 through 3.15 and Django 4.2 through 6.1 are supported. Django 4.2 runs
+with `django-typer` 3.x, whose `django_typer.parsers` does not export click's types,
+so `src/django_snapshots/parsers.py` falls back to importing them from `click`.
 
 ## Project Structure
 
