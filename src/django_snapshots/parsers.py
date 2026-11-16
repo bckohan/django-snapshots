@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from django_snapshots._compat import Context, Parameter, ParamType
-
 if TYPE_CHECKING:
+    from django_typer.parsers import Context, Parameter, ParamType
+
     from django_snapshots.manifest import Snapshot
+else:
+    try:
+        # django-typer 4 exports click's types; with typer >= 0.26 these are
+        # typer's vendored copy of click, which is what typer expects
+        from django_typer.parsers import Context, Parameter, ParamType
+    except ImportError:  # pragma: no cover - django-typer 3.x (Django 4.2)
+        from click import Context, Parameter, ParamType
 
 
 class SnapshotNameType(ParamType):

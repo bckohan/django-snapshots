@@ -7,7 +7,7 @@ so neither sub-app must import the other.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Protocol, Union, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -43,7 +43,7 @@ class AsyncArtifactExporter(ArtifactExporterBase, Protocol):
 
 
 # Union alias used throughout the codebase
-AnyArtifactExporter = Union[ArtifactExporter, AsyncArtifactExporter]
+AnyArtifactExporter = ArtifactExporter | AsyncArtifactExporter
 
 
 @runtime_checkable
@@ -70,4 +70,4 @@ class AsyncArtifactImporter(ArtifactImporterBase, Protocol):
     async def restore(self, src: Path) -> None: ...
 
 
-AnyArtifactImporter = Union[ArtifactImporter, AsyncArtifactImporter]
+AnyArtifactImporter = ArtifactImporter | AsyncArtifactImporter

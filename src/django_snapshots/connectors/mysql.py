@@ -25,7 +25,7 @@ from django.conf import settings as django_settings
 from django_snapshots.exceptions import SnapshotConnectorError
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _is_mariadb_client(executable: str) -> bool:
     """Return True if *executable* is the MariaDB flavour of the client tool."""
     try:

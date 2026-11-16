@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from django_snapshots._compat import is_relative_to
 from django_snapshots.containers import delete_snapshot, list_snapshots
 from django_snapshots.manifest import Snapshot
 
@@ -23,7 +22,7 @@ def _check_storage_outside(storage, directory: str) -> None:
     from django_snapshots.storage.local import LocalFileSystemBackend
 
     if isinstance(storage, LocalFileSystemBackend) and (
-        is_relative_to(storage.location.resolve(), Path(directory).resolve())
+        storage.location.resolve().is_relative_to(Path(directory).resolve())
     ):
         raise CommandError(
             f"Snapshot storage ({storage.location}) is inside {directory}; "

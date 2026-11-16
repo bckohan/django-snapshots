@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 import inspect
 import os
@@ -149,9 +147,7 @@ def pytest_configure(config: pytest.Config) -> None:
         # verify that the environment is set up correctly - this is used in CI to make
         # sure we're testing against the dependencies we think we are
         expected_python = os.getenv("TEST_PYTHON_VERSION")
-        expected_django = os.getenv("TEST_DJANGO_VERSION", "")
-        if expected_django.startswith("dj"):  # str.removeprefix needs Python 3.9
-            expected_django = expected_django[2:]
+        expected_django = os.getenv("TEST_DJANGO_VERSION", "").removeprefix("dj")
         if expected_django.isdigit():
             expected_django = ".".join(expected_django)
 
