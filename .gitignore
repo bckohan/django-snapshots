@@ -209,3 +209,6 @@ zizmor.sarif
 bandit.sarif
 .worktrees/
 docs
+
+# pip freeze logs written by tests/conftest.py under GITHUB_ACTIONS or --log-env
+requirements-test-*.txt

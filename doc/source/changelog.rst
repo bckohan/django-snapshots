@@ -3,7 +3,15 @@
 Changelog
 =========
 
-0.1.0b1 (unreleased)
+0.1.0b2 (unreleased)
+--------------------
+
+* Require Python 3.11+ (drop 3.8, 3.9 and 3.10).
+* Require Django 5.2+ (drop 4.2, 5.0 and 5.1).
+* Require django-typer 4.3+ (Typer 0.29).
+* Drop the unused ``typing_extensions`` dependency.
+
+0.1.0b1 (2026-10-16)
 --------------------
 
 First beta release.
