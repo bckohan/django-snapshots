@@ -55,7 +55,6 @@ class _BackupCommand(SnapshotsCommand):
     _backup_name: str
     _backup_format: SnapshotFormat
     _backup_temp_dir: Path
-    _backup_default_results: list[AnyArtifactExporter]
 
 
 def _sha256(path: Path) -> str:
@@ -115,7 +114,6 @@ def backup(
         raise typer.BadParameter(str(err), param_hint="--name") from err
     cmd._backup_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_backup_"))
 
-    cmd._backup_default_results = []
     if not ctx.invoked_subcommand:
         all_results: list[AnyArtifactExporter] = []
         for child in cmd.get_subcommand("backup").children.values():
@@ -126,10 +124,6 @@ def backup(
                 all_results.extend(result)
             else:
                 all_results.append(result)
-        # click discards a chained group's return value when no subcommand is
-        # invoked before django-typer 3.7 (all Django 4.2 installs), so the
-        # finalizer falls back to this
-        cmd._backup_default_results = all_results
         return all_results
     return None
 
@@ -213,7 +207,7 @@ def backup_finalize(
         # subcommands that had nothing to back up
         exporters: list[AnyArtifactExporter] = [
             y
-            for x in results or cmd._backup_default_results
+            for x in results
             for y in (x if isinstance(x, (list, tuple)) else [x])
             if y is not None
         ]

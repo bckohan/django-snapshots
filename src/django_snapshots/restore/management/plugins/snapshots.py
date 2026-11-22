@@ -44,7 +44,6 @@ class _RestoreCommand(SnapshotsCommand):
     _restore_temp_dir: Path
     _restore_snapshot: Snapshot
     _restore_name: str
-    _restore_default_results: list[AnyArtifactImporter]
 
 
 def _sha256(path: Path) -> str:
@@ -88,7 +87,7 @@ def restore(
         Snapshot | None,
         typer.Option(
             help=str(_("Snapshot name (default: latest)")),
-            click_type=SNAPSHOT,
+            parser=SNAPSHOT,
             shell_complete=snapshot_names,
         ),
     ] = None,
@@ -105,7 +104,6 @@ def restore(
     cmd._restore_name = name.name
     cmd._restore_temp_dir = Path(tempfile.mkdtemp(prefix="django_snapshots_restore_"))
 
-    cmd._restore_default_results = []
     if not ctx.invoked_subcommand:
         # restore everything the snapshot contains; artifacts it doesn't
         # contain are only worth a warning when explicitly requested
@@ -118,10 +116,6 @@ def restore(
             for imp in result if isinstance(result, (list, tuple)) else [result]:
                 if imp.filename in in_snapshot:
                     all_results.append(imp)
-        # click discards a chained group's return value when no subcommand is
-        # invoked before django-typer 3.7 (all Django 4.2 installs), so the
-        # finalizer falls back to this
-        cmd._restore_default_results = all_results
         return all_results
     return None
 
@@ -218,7 +212,7 @@ def restore_finalize(
         # subcommands that had nothing to restore
         importers: list[AnyArtifactImporter] = [
             y
-            for x in results or cmd._restore_default_results
+            for x in results
             for y in (
                 x
                 if isinstance(x, (list, tuple))

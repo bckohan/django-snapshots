@@ -15,9 +15,8 @@ homepage = "https://django-snapshots.readthedocs.io"
 keywords = ["django"]
 dependencies = [
     "asyncer>=0.0.11",
-    "django>=4.2,<6.2",
-    # django-typer 4 requires Django 5.2+; 3.x supports Django 4.2
-    "django-typer>=3.4.0",
+    "django>=5.2,<6.2",
+    "django-typer>=4.3.0",
     "tqdm>=4.62.0",
     "python-dateutil>=2.8.0",
 ]
@@ -27,9 +26,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Development Status :: 4 - Beta",
-    "Framework :: Django :: 4.2",
-    "Framework :: Django :: 5.0",
-    "Framework :: Django :: 5.1",
     "Framework :: Django :: 5.2",
     "Framework :: Django :: 6.0",
     "Framework :: Django :: 6.1",
@@ -57,7 +53,6 @@ build-backend = "hatchling.build"
 package = true
 conflicts = [
   [
-    { group = "dj42" },
     { group = "dj52" },
     { group = "dj61" },
   ],
@@ -107,7 +102,6 @@ psycopg3      = ["psycopg"]
 mysqlclient14 = ["mysqlclient==1.4.3"]
 mysqlclient2x = ["mysqlclient>=2.2.8"]
 oracledb      = ["oracledb>=2.3.0"]
-dj42          = ["Django>=4.2,<5.0"]
 dj52          = ["Django>=5.2,<6.0"]
 dj61          = ["Django>=6.1,<6.2; python_version >= '3.12'"]
 typing = [

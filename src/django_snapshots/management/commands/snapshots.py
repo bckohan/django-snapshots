@@ -102,7 +102,7 @@ class Command(TyperCommand):
             Snapshot | None,
             typer.Argument(
                 help=str(_("Snapshot name")),
-                click_type=SNAPSHOT,
+                parser=SNAPSHOT,
                 shell_complete=snapshot_names,
             ),
         ] = None,
@@ -150,7 +150,7 @@ class Command(TyperCommand):
             Snapshot,
             typer.Argument(
                 help=str(_("Snapshot name")),
-                click_type=SNAPSHOT,
+                parser=SNAPSHOT,
                 shell_complete=snapshot_names,
             ),
         ],
@@ -273,7 +273,7 @@ class Command(TyperCommand):
             Snapshot | None,
             typer.Argument(
                 help=str(_("Snapshot name (default: latest)")),
-                click_type=SNAPSHOT,
+                parser=SNAPSHOT,
                 shell_complete=snapshot_names,
             ),
         ] = None,

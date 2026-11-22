@@ -69,7 +69,7 @@ just release 1.2.3   # validates version, tags, and pushes tag to GitHub
 
 Django version and database clients are selected at test-run time via `uv` dependency groups — no lock-file pinning:
 
-- Django version groups (mutually exclusive): `dj42`, `dj52`, `dj61`
+- Django version groups (mutually exclusive): `dj52`, `dj61`
 - PostgreSQL: `psycopg2`, `psycopg3` (mutually exclusive)
 - MySQL/MariaDB: `mysqlclient14`, `mysqlclient2x` (mutually exclusive)
 - Oracle: `oracledb`
@@ -78,12 +78,9 @@ CI passes these as `--group` flags to `just test-all`:
 ```bash
 just test-all --group psycopg3 -p "3.12" --group dj52
 just test-all -p "3.11" --group dj52    # SQLite (no DB client group)
-just test-all -p "3.11" --group dj42    # Django 4.2 (django-typer 3.x)
 ```
 
-Python 3.11 through 3.15 and Django 4.2 through 6.1 are supported. Django 4.2 runs
-with `django-typer` 3.x, whose `django_typer.parsers` does not export click's types,
-so `src/django_snapshots/parsers.py` falls back to importing them from `click`.
+Python 3.11 through 3.15, Django 5.2 through 6.1 and `django-typer` 4.3+ are supported.
 
 ## Project Structure
 

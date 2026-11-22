@@ -45,6 +45,6 @@ def test_snapshot_names_storage_error(tmp_path):
 @pytest.mark.django_db
 def test_snapshot_type_passes_snapshot_through(storage):
     call_command("snapshots", "backup", "--name", "snap", "environment")
-    snapshot = SNAPSHOT.convert("snap")
+    snapshot = SNAPSHOT("snap")
     assert snapshot.name == "snap"
-    assert SNAPSHOT.convert(snapshot) is snapshot
+    assert SNAPSHOT(snapshot) is snapshot
