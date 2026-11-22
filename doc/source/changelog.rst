@@ -3,7 +3,7 @@
 Changelog
 =========
 
-0.1.0b2 (unreleased)
+0.1.0b2 (2026-11-22)
 --------------------
 
 * Require Python 3.11+ (drop 3.8, 3.9 and 3.10).
